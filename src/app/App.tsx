@@ -1,6 +1,7 @@
 import React, {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -30,97 +31,23 @@ import {
   EyeOff,
 } from "lucide-react";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { deriveMoneyTotals } from "../lib/itineraryMoney";
+import type {
+  CanRow,
+  Flight,
+  FormData,
+  Itinerary,
+  Passenger,
+  Status,
+  SupRow,
+} from "./itineraryTypes";
 
-type Status = "draft" | "ready";
-
-interface Flight {
-  route: string;
-  airline: string;
-  flightNo: string;
-  depAirport: string;
-  depTerminal: string;
-  depDate: string;
-  depTime: string;
-  arrAirport: string;
-  arrTerminal: string;
-  arrDate: string;
-  arrTime: string;
-  duration: string;
-  baggage: string;
-}
-
-interface SupRow {
-  id: string;
-  desc: string;
-  amount: string;
-  chargeType: string;
-}
-interface CanRow {
-  id: string;
-  rule: string;
-  charge: string;
-}
-
-interface Passenger {
-  id: string;
-  honorific: string;
-  firstName: string;
-  lastName: string;
-  passengerType: string;
-  birthdate: string;
-  nationality: string;
-  passportNo: string;
-  passportExpiry: string;
-  issuingCountry: string;
-  dateIssued: string;
-}
-
-interface FormData {
-  agencyName: string;
-  agencyTagline: string;
-  agencyFooter: string;
-  page1Heading: string;
-  outbound: Flight;
-  returnFlight: Flight;
-  hotelName: string;
-  hotelAddress: string;
-  hotelPhone: string;
-  checkIn: string;
-  checkOut: string;
-  roomDesc: string;
-  inclusions: string;
-  supplements: SupRow[];
-  cancellationRows: CanRow[];
-  noShow: string;
-  ratesConditions: string;
-  contactName: string;
-  contactPhone: string;
-  contactEmail: string;
-  passengers: Passenger[];
-  adultBaseFare: string;
-  adultOtherCharges: string;
-  adultTotalFare: string;
-  roomRate: string;
-  roomTaxes: string;
-  totalRoomRate: string;
-  originalTotal: string;
-  savings: string;
-  totalDue: string;
-  internalNotes: string;
-}
-
-interface Itinerary {
-  id: string;
-  title: string;
-  client: string;
-  destination: string;
-  travelStart: string;
-  travelEnd: string;
-  status: Status;
-  lastUpdated: string;
-  form: FormData;
-}
+import {
+  buildItineraryPdfPageFactories,
+  ItineraryPdfPageShell,
+  PDF_PAGE_H,
+  PDF_PAGE_W,
+} from "./itineraryPdfPages";
 
 const ITIN_STORAGE_KEY = "lyzius.itineraries.v1";
 
@@ -312,7 +239,30 @@ const blankForm: FormData = {
   savings: "",
   totalDue: "",
   internalNotes: "",
+  hidePricingOnPdf: false,
 };
+
+function coerceBoolStored(raw: unknown, fallback: boolean): boolean {
+  if (typeof raw === "boolean") return raw;
+  if (typeof raw === "string") {
+    const s = raw.trim().toLowerCase();
+    if (
+      s === "1" ||
+      s === "true" ||
+      s === "yes" ||
+      s === "on"
+    )
+      return true;
+    if (
+      s === "0" ||
+      s === "false" ||
+      s === "no" ||
+      s === "off"
+    )
+      return false;
+  }
+  return fallback;
+}
 
 function strField(raw: unknown, fallback = ""): string {
   return typeof raw === "string" ? raw : fallback;
@@ -436,6 +386,10 @@ function normalizeStoredForm(raw: unknown): FormData {
     savings: strField(p.savings),
     totalDue: strField(p.totalDue),
     internalNotes: strField(p.internalNotes),
+    hidePricingOnPdf: coerceBoolStored(
+      p.hidePricingOnPdf,
+      blankForm.hidePricingOnPdf,
+    ),
   };
 }
 
@@ -587,200 +541,7 @@ function StatusPill({ status }: { status: Status }) {
   );
 }
 
-// ─── PDF Preview ──────────────────────────────────────────────────────────────
-
-const PAGE_W = 595;
-const PAGE_H = 842;
-
-function PdfRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <tr>
-      <td
-        style={{
-          padding: "5px 10px",
-          color: "#8C8780",
-          fontSize: 8.5,
-          width: "38%",
-          borderBottom: "1px solid rgba(255,255,255,0.055)",
-          verticalAlign: "top",
-        }}
-      >
-        {label}
-      </td>
-      <td
-        style={{
-          padding: "5px 10px",
-          color: "#EDE9E2",
-          borderBottom: "1px solid rgba(255,255,255,0.055)",
-          verticalAlign: "top",
-          lineHeight: 1.5,
-        }}
-      >
-        {value}
-      </td>
-    </tr>
-  );
-}
-
-function PdfBlock({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <div
-        style={{
-          fontSize: 7.5,
-          fontWeight: 700,
-          letterSpacing: "0.14em",
-          textTransform: "uppercase" as const,
-          color: "#7A7470",
-          marginBottom: 5,
-        }}
-      >
-        {title}
-      </div>
-      <div
-        style={{
-          border: "1px solid rgba(255,255,255,0.1)",
-          borderRadius: 4,
-          overflow: "hidden",
-        }}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function PdfFlightBlock({
-  title,
-  f,
-}: {
-  title: string;
-  f: Flight;
-}) {
-  return (
-    <PdfBlock title={title}>
-      <table
-        style={{ width: "100%", borderCollapse: "collapse" }}
-      >
-        <tbody>
-          <PdfRow label="Route" value={f.route || "—"} />
-          <PdfRow
-            label="Airline / Flight No."
-            value={
-              [f.airline, f.flightNo]
-                .filter(Boolean)
-                .join(" · ") || "—"
-            }
-          />
-          <PdfRow
-            label="Departure"
-            value={
-              [f.depAirport, f.depTerminal]
-                .filter(Boolean)
-                .join(", ") || "—"
-            }
-          />
-          <PdfRow
-            label="Dep. Date / Time"
-            value={
-              [
-                formatDateDisp(f.depDate),
-                f.depTime,
-              ]
-                .filter(Boolean)
-                .join("  ") || "—"
-            }
-          />
-          <PdfRow
-            label="Arrival"
-            value={
-              [f.arrAirport, f.arrTerminal]
-                .filter(Boolean)
-                .join(", ") || "—"
-            }
-          />
-          <PdfRow
-            label="Arr. Date / Time"
-            value={
-              [
-                formatDateDisp(f.arrDate),
-                f.arrTime,
-              ]
-                .filter(Boolean)
-                .join("  ") || "—"
-            }
-          />
-          <PdfRow label="Duration" value={f.duration || "—"} />
-          <PdfRow label="Baggage" value={f.baggage || "—"} />
-        </tbody>
-      </table>
-    </PdfBlock>
-  );
-}
-
-/** Logo + agency name/tagline used in PDF preview headers */
-function PdfBrandBlock({ form }: { form: FormData }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "flex-start",
-        gap: 12,
-      }}
-    >
-      <img
-        src="/lyzius-logo.png"
-        alt=""
-        style={{
-          height: 42,
-          width: "auto",
-          maxWidth: 120,
-          objectFit: "contain",
-          objectPosition: "left center",
-          flexShrink: 0,
-        }}
-        loading="eager"
-      />
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 15,
-            fontWeight: 700,
-            color: "#EDE9E2",
-            fontFamily: "'Playfair Display', serif",
-            letterSpacing: "-0.02em",
-          }}
-        >
-          {form.agencyName || "Agency Name"}
-        </div>
-        {form.agencyTagline ? (
-          <div
-            style={{
-              fontSize: 8,
-              color: "#7A7470",
-              marginTop: 2,
-              letterSpacing: "0.08em",
-            }}
-          >
-            {form.agencyTagline}
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
+// ─── PDF Preview (light multipage · matches downloaded PDF page count) ────────
 
 function PDFPreview({ form }: { form: FormData }) {
   const [zoom, setZoom] = useState(0.65);
@@ -791,46 +552,60 @@ function PDFPreview({ form }: { form: FormData }) {
     [1.0, "100%"],
   ];
 
-  const pageStyle: React.CSSProperties = {
-    width: PAGE_W,
-    height: PAGE_H,
-    backgroundColor: "#1C1A18",
-    color: "#EDE9E2",
-    fontFamily: "'DM Sans', sans-serif",
-    fontSize: 9.5,
-    padding: "36px 40px",
-    boxSizing: "border-box",
-    position: "relative",
-  };
+  const money = useMemo(
+    () =>
+      deriveMoneyTotals({
+        adultBaseFare: form.adultBaseFare,
+        adultOtherCharges: form.adultOtherCharges,
+        roomRate: form.roomRate,
+        roomTaxes: form.roomTaxes,
+        savings: form.savings,
+        supplements: form.supplements,
+      }),
+    [
+      form.adultBaseFare,
+      form.adultOtherCharges,
+      form.roomRate,
+      form.roomTaxes,
+      form.savings,
+      form.supplements,
+    ],
+  );
 
-  const headerBorder: React.CSSProperties = {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 22,
-    paddingBottom: 14,
-    borderBottom: "1px solid rgba(255,255,255,0.1)",
-  };
+  const pageFactories = useMemo(
+    () =>
+      buildItineraryPdfPageFactories({
+        form,
+        money,
+        formatDateDisp,
+        passengerDisplayLine,
+        hidePricing: form.hidePricingOnPdf,
+      }),
+    [form, money],
+  );
+
+  const pageCount = pageFactories.length;
 
   return (
     <div
       id="itinerary-pdf-print-root"
-      className="flex flex-col h-full bg-[#161412]"
+      className="flex flex-col h-full bg-zinc-100"
     >
-      {/* Zoom controls */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/8 shrink-0 print:hidden">
-        <span className="text-[11px] text-white/30 font-mono tracking-widest">
-          A4 · PREVIEW
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-200 shrink-0 bg-white">
+        <span className="text-[11px] text-zinc-400 font-mono tracking-widest">
+          A4 · {pageCount} page{pageCount === 1 ? "" : "s"}
+          {form.hidePricingOnPdf ? " · prices hidden" : ""}
         </span>
         <div className="flex items-center gap-0.5">
           {zoomLevels.map(([z, label]) => (
             <button
               key={z}
+              type="button"
               onClick={() => setZoom(z)}
               className={`px-2.5 py-1 rounded text-[11px] font-mono transition-colors ${
                 zoom === z
-                  ? "bg-white/12 text-white/80"
-                  : "text-white/30 hover:text-white/55"
+                  ? "bg-zinc-200 text-zinc-800"
+                  : "text-zinc-400 hover:text-zinc-700"
               }`}
             >
               {label}
@@ -839,686 +614,46 @@ function PDFPreview({ form }: { form: FormData }) {
         </div>
       </div>
 
-      {/* Scrollable canvas */}
       <div className="flex-1 overflow-auto py-8 flex flex-col items-center gap-6">
-        {/* Page 1 */}
-        <div
-          style={{
-            width: PAGE_W * zoom,
-            height: PAGE_H * zoom,
-            flexShrink: 0,
-            position: "relative",
-          }}
-        >
+        {pageFactories.map((F, i) => (
           <div
+            key={`pv-${i}`}
             style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              transform: `scale(${zoom})`,
-              transformOrigin: "top left",
-              boxShadow: "0 12px 48px rgba(0,0,0,0.6)",
+              width: PDF_PAGE_W * zoom,
+              height: PDF_PAGE_H * zoom,
+              position: "relative",
+              flexShrink: 0,
             }}
           >
-            <div style={pageStyle}>
-              {/* Header */}
-              <div style={headerBorder}>
-                <PdfBrandBlock form={form} />
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: "#EDE9E2",
-                    letterSpacing: "0.06em",
-                    textTransform: "uppercase" as const,
-                  }}
-                >
-                  {form.page1Heading || "Flight Details"}
-                </div>
-              </div>
-
-              {/* Outbound flight */}
-              <PdfFlightBlock
-                title="Outbound Flight"
-                f={form.outbound}
-              />
-              {/* Return flight */}
-              <PdfFlightBlock
-                title="Return Flight"
-                f={form.returnFlight}
-              />
-
-              {/* Hotel */}
-              <PdfBlock title="Hotel">
-                <table
-                  style={{
-                    width: "100%",
-                    borderCollapse: "collapse",
-                  }}
-                >
-                  <tbody>
-                    <PdfRow
-                      label="Hotel"
-                      value={form.hotelName || "—"}
-                    />
-                    <PdfRow
-                      label="Address"
-                      value={
-                        form.hotelAddress.replace(
-                          /\n/g,
-                          ", ",
-                        ) || "—"
-                      }
-                    />
-                    <PdfRow
-                      label="Phone"
-                      value={form.hotelPhone || "—"}
-                    />
-                    <PdfRow
-                      label="Check-in"
-                      value={
-                        formatDateDisp(form.checkIn) || "—"
-                      }
-                    />
-                    <PdfRow
-                      label="Check-out"
-                      value={
-                        formatDateDisp(form.checkOut) ||
-                        "—"
-                      }
-                    />
-                    <PdfRow
-                      label="Room"
-                      value={form.roomDesc || "—"}
-                    />
-                    <PdfRow
-                      label="Inclusions"
-                      value={form.inclusions || "—"}
-                    />
-                  </tbody>
-                </table>
-              </PdfBlock>
-
-              {/* Supplements */}
-              {form.supplements.length > 0 && (
-                <PdfBlock title="Supplements & Fees">
-                  <table
-                    style={{
-                      width: "100%",
-                      borderCollapse: "collapse",
-                    }}
-                  >
-                    <thead>
-                      <tr
-                        style={{
-                          backgroundColor:
-                            "rgba(255,255,255,0.035)",
-                        }}
-                      >
-                        {[
-                          "Description",
-                          "Amount",
-                          "Charge Type",
-                        ].map((h) => (
-                          <th
-                            key={h}
-                            style={{
-                              padding: "5px 10px",
-                              textAlign: "left" as const,
-                              fontSize: 7.5,
-                              color: "#7A7470",
-                              fontWeight: 600,
-                              letterSpacing: "0.1em",
-                              textTransform:
-                                "uppercase" as const,
-                            }}
-                          >
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {form.supplements.map((s) => (
-                        <tr key={s.id}>
-                          <td
-                            style={{
-                              padding: "5px 10px",
-                              color: "#EDE9E2",
-                              borderTop:
-                                "1px solid rgba(255,255,255,0.055)",
-                            }}
-                          >
-                            {s.desc}
-                          </td>
-                          <td
-                            style={{
-                              padding: "5px 10px",
-                              color: "#EDE9E2",
-                              fontFamily:
-                                "'DM Mono', monospace",
-                              borderTop:
-                                "1px solid rgba(255,255,255,0.055)",
-                            }}
-                          >
-                            {s.amount}
-                          </td>
-                          <td
-                            style={{
-                              padding: "5px 10px",
-                              color: "#8C8780",
-                              borderTop:
-                                "1px solid rgba(255,255,255,0.055)",
-                            }}
-                          >
-                            {s.chargeType}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </PdfBlock>
-              )}
-
-              {/* Cancellation */}
-              {form.cancellationRows.length > 0 && (
-                <PdfBlock title="Cancellation Policy">
-                  <table
-                    style={{
-                      width: "100%",
-                      borderCollapse: "collapse",
-                    }}
-                  >
-                    <thead>
-                      <tr
-                        style={{
-                          backgroundColor:
-                            "rgba(255,255,255,0.035)",
-                        }}
-                      >
-                        {["Period / Condition", "Charge"].map(
-                          (h) => (
-                            <th
-                              key={h}
-                              style={{
-                                padding: "5px 10px",
-                                textAlign: "left" as const,
-                                fontSize: 7.5,
-                                color: "#7A7470",
-                                fontWeight: 600,
-                                letterSpacing: "0.1em",
-                                textTransform:
-                                  "uppercase" as const,
-                              }}
-                            >
-                              {h}
-                            </th>
-                          ),
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {form.cancellationRows.map((c) => (
-                        <tr key={c.id}>
-                          <td
-                            style={{
-                              padding: "5px 10px",
-                              color: "#EDE9E2",
-                              borderTop:
-                                "1px solid rgba(255,255,255,0.055)",
-                            }}
-                          >
-                            {c.rule}
-                          </td>
-                          <td
-                            style={{
-                              padding: "5px 10px",
-                              color: "#EDE9E2",
-                              fontFamily:
-                                "'DM Mono', monospace",
-                              borderTop:
-                                "1px solid rgba(255,255,255,0.055)",
-                            }}
-                          >
-                            {c.charge}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </PdfBlock>
-              )}
-
-              {/* Rates & conditions */}
-              {form.ratesConditions && (
-                <div style={{ marginBottom: 14 }}>
-                  <div
-                    style={{
-                      fontSize: 7.5,
-                      fontWeight: 700,
-                      letterSpacing: "0.14em",
-                      textTransform: "uppercase" as const,
-                      color: "#7A7470",
-                      marginBottom: 6,
-                    }}
-                  >
-                    Rates & Conditions
-                  </div>
-                  <p
-                    style={{
-                      fontSize: 8.5,
-                      color: "#B8B3AB",
-                      lineHeight: 1.75,
-                      maxWidth: "95%",
-                    }}
-                  >
-                    {form.ratesConditions}
-                  </p>
-                </div>
-              )}
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                transform: `scale(${zoom})`,
+                transformOrigin: "top left",
+                boxShadow:
+                  "0 12px 48px rgba(0,0,0,0.12)",
+              }}
+            >
+              <ItineraryPdfPageShell>{F()}</ItineraryPdfPageShell>
             </div>
           </div>
-        </div>
+        ))}
+      </div>
 
-        <div
-          className="text-white/20 font-mono"
-          style={{ fontSize: 10 }}
-        >
-          Page 1 of 2
-        </div>
-
-        {/* Page 2 */}
-        <div
-          style={{
-            width: PAGE_W * zoom,
-            height: PAGE_H * zoom,
-            flexShrink: 0,
-            position: "relative",
-          }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              transform: `scale(${zoom})`,
-              transformOrigin: "top left",
-              boxShadow: "0 12px 48px rgba(0,0,0,0.6)",
-            }}
-          >
-            <div style={pageStyle}>
-              {/* Header */}
-              <div style={headerBorder}>
-                <PdfBrandBlock form={form} />
-                <div
-                  style={{
-                    textAlign: "right" as const,
-                    fontSize: 8.5,
-                    color: "#8C8780",
-                    lineHeight: 1.8,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontWeight: 600,
-                      color: "#EDE9E2",
-                      marginBottom: 1,
-                    }}
-                  >
-                    {form.contactName || "—"}
-                  </div>
-                  <div>{form.contactPhone || "—"}</div>
-                  <div>{form.contactEmail || "—"}</div>
-                </div>
-              </div>
-
-              {/* Passenger */}
-              {form.passengers.map((pas, idx) => (
-                <PdfBlock
-                  key={pas.id}
-                  title={
-                    form.passengers.length > 1
-                      ? `Passenger ${idx + 1}`
-                      : "Passenger Information"
-                  }
-                >
-                  <table
-                    style={{
-                      width: "100%",
-                      borderCollapse: "collapse",
-                    }}
-                  >
-                    <tbody>
-                      <PdfRow
-                        label="Full name"
-                        value={
-                          passengerDisplayLine(pas) || "—"
-                        }
-                      />
-                      <PdfRow
-                        label="Passenger type"
-                        value={
-                          pas.passengerType.trim() || "—"
-                        }
-                      />
-                      <PdfRow
-                        label="Date of birth"
-                        value={
-                          formatDateDisp(pas.birthdate) || "—"
-                        }
-                      />
-                      <PdfRow
-                        label="Nationality"
-                        value={
-                          pas.nationality.trim() || "—"
-                        }
-                      />
-                      <PdfRow
-                        label="Passport no."
-                        value={
-                          pas.passportNo.trim() || "—"
-                        }
-                      />
-                      <PdfRow
-                        label="Passport expiry"
-                        value={
-                          formatDateDisp(pas.passportExpiry) ||
-                          "—"
-                        }
-                      />
-                      <PdfRow
-                        label="Issuing country"
-                        value={
-                          pas.issuingCountry.trim() || "—"
-                        }
-                      />
-                      <PdfRow
-                        label="Date issued"
-                        value={
-                          formatDateDisp(pas.dateIssued) || "—"
-                        }
-                      />
-                    </tbody>
-                  </table>
-                </PdfBlock>
-              ))}
-
-              {/* Payment breakdown */}
-              <div
-                style={{
-                  display: "flex",
-                  gap: 12,
-                  marginBottom: 14,
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  <PdfBlock title="Adult Fare">
-                    <table
-                      style={{
-                        width: "100%",
-                        borderCollapse: "collapse",
-                      }}
-                    >
-                      <tbody>
-                        <PdfRow
-                          label="Base fare (1 adult)"
-                          value={`PHP ${form.adultBaseFare || "0.00"}`}
-                        />
-                        <PdfRow
-                          label="Other charges"
-                          value={`PHP ${form.adultOtherCharges || "0.00"}`}
-                        />
-                        <tr>
-                          <td
-                            style={{
-                              padding: "6px 10px",
-                              color: "#8C8780",
-                              fontSize: 8.5,
-                              borderTop:
-                                "1px solid rgba(255,255,255,0.12)",
-                              fontWeight: 600,
-                            }}
-                          >
-                            Total adult fare
-                          </td>
-                          <td
-                            style={{
-                              padding: "6px 10px",
-                              color: "#EDE9E2",
-                              fontFamily:
-                                "'DM Mono', monospace",
-                              fontWeight: 700,
-                              borderTop:
-                                "1px solid rgba(255,255,255,0.12)",
-                            }}
-                          >
-                            PHP {form.adultTotalFare || "0.00"}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </PdfBlock>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <PdfBlock title="Room Rate">
-                    <table
-                      style={{
-                        width: "100%",
-                        borderCollapse: "collapse",
-                      }}
-                    >
-                      <tbody>
-                        <PdfRow
-                          label="Room rate"
-                          value={`PHP ${form.roomRate || "0.00"}`}
-                        />
-                        <PdfRow
-                          label="Taxes & fees"
-                          value={`PHP ${form.roomTaxes || "0.00"}`}
-                        />
-                        <tr>
-                          <td
-                            style={{
-                              padding: "6px 10px",
-                              color: "#8C8780",
-                              fontSize: 8.5,
-                              borderTop:
-                                "1px solid rgba(255,255,255,0.12)",
-                              fontWeight: 600,
-                            }}
-                          >
-                            Total room rate
-                          </td>
-                          <td
-                            style={{
-                              padding: "6px 10px",
-                              color: "#EDE9E2",
-                              fontFamily:
-                                "'DM Mono', monospace",
-                              fontWeight: 700,
-                              borderTop:
-                                "1px solid rgba(255,255,255,0.12)",
-                            }}
-                          >
-                            PHP {form.totalRoomRate || "0.00"}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </PdfBlock>
-                </div>
-              </div>
-
-              {/* Summary totals */}
-              <PdfBlock title="Summary">
-                <table
-                  style={{
-                    width: "100%",
-                    borderCollapse: "collapse",
-                  }}
-                >
-                  <tbody>
-                    <tr>
-                      <td
-                        style={{
-                          padding: "6px 10px",
-                          color: "#8C8780",
-                          fontSize: 9,
-                          borderBottom:
-                            "1px solid rgba(255,255,255,0.055)",
-                        }}
-                      >
-                        Original total
-                      </td>
-                      <td
-                        style={{
-                          padding: "6px 10px",
-                          color: "#8C8780",
-                          fontFamily: "'DM Mono', monospace",
-                          textAlign: "right" as const,
-                          textDecoration: "line-through",
-                          borderBottom:
-                            "1px solid rgba(255,255,255,0.055)",
-                        }}
-                      >
-                        PHP {form.originalTotal || "0.00"}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td
-                        style={{
-                          padding: "6px 10px",
-                          color: "#C0453A",
-                          fontSize: 9,
-                          borderBottom:
-                            "1px solid rgba(255,255,255,0.055)",
-                        }}
-                      >
-                        Bundle savings
-                      </td>
-                      <td
-                        style={{
-                          padding: "6px 10px",
-                          color: "#C0453A",
-                          fontFamily: "'DM Mono', monospace",
-                          textAlign: "right" as const,
-                          fontWeight: 600,
-                          borderBottom:
-                            "1px solid rgba(255,255,255,0.055)",
-                        }}
-                      >
-                        − PHP {form.savings || "0.00"}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td
-                        style={{
-                          padding: "10px 10px",
-                          color: "#EDE9E2",
-                          fontSize: 12,
-                          fontWeight: 700,
-                          letterSpacing: "-0.01em",
-                        }}
-                      >
-                        Total due
-                      </td>
-                      <td
-                        style={{
-                          padding: "10px 10px",
-                          color: "#EDE9E2",
-                          fontFamily: "'DM Mono', monospace",
-                          fontSize: 15,
-                          fontWeight: 700,
-                          textAlign: "right" as const,
-                          letterSpacing: "-0.02em",
-                        }}
-                      >
-                        PHP {form.totalDue || "0.00"}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </PdfBlock>
-
-              {/* Footer */}
-              <div
-                style={{
-                  position: "absolute",
-                  bottom: 34,
-                  left: 40,
-                  right: 40,
-                }}
-              >
-                {form.agencyFooter && (
-                  <p
-                    style={{
-                      fontSize: 7.5,
-                      color: "#5A5652",
-                      lineHeight: 1.9,
-                      marginBottom: 14,
-                      borderTop:
-                        "1px solid rgba(255,255,255,0.07)",
-                      paddingTop: 12,
-                    }}
-                  >
-                    {form.agencyFooter}
-                  </p>
-                )}
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-end",
-                  }}
-                >
-                  <div
-                    style={{ fontSize: 7.5, color: "#5A5652" }}
-                  >
-                    <p style={{ marginBottom: 18 }}>
-                      I hereby certify that the information
-                      above is correct and accurate.
-                    </p>
-                    <div
-                      style={{
-                        borderTop:
-                          "1px solid rgba(255,255,255,0.18)",
-                        paddingTop: 4,
-                        width: 210,
-                      }}
-                    >
-                      Signature over printed name
-                    </div>
-                  </div>
-                  <div
-                    style={{ fontSize: 7.5, color: "#5A5652" }}
-                  >
-                    <div
-                      style={{ marginBottom: 18, opacity: 0 }}
-                    >
-                      _
-                    </div>
-                    <div
-                      style={{
-                        borderTop:
-                          "1px solid rgba(255,255,255,0.18)",
-                        paddingTop: 4,
-                        width: 140,
-                      }}
-                    >
-                      Date
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div
-          className="text-white/20 font-mono pb-8"
-          style={{ fontSize: 10 }}
-        >
-          Page 2 of 2
+      {/* Off-screen pages for raster PDF (matches preview page count exactly) */}
+      <div
+        className="fixed left-[-12000px] top-0 w-[595px]"
+        aria-hidden
+        style={{ zIndex: -10, opacity: 1 }}
+      >
+        <div className="flex flex-col gap-6">
+          {pageFactories.map((F, i) => (
+            <ItineraryPdfPageShell exportMarker key={`ex-${i}`}>
+              {F()}
+            </ItineraryPdfPageShell>
+          ))}
         </div>
       </div>
     </div>
@@ -1671,16 +806,75 @@ function EditorView({
   const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState<"edit" | "preview">("edit");
   const [showPreview, setShowPreview] = useState(true);
+  const [pdfExporting, setPdfExporting] = useState(false);
+  const exportingPdfRef = useRef(false);
 
-  const exportPdf = useCallback(() => {
-    setShowPreview(true);
-    setTab("preview");
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        window.print();
-      });
+  const moneyDerived = useMemo(
+    () =>
+      deriveMoneyTotals({
+        adultBaseFare: form.adultBaseFare,
+        adultOtherCharges: form.adultOtherCharges,
+        roomRate: form.roomRate,
+        roomTaxes: form.roomTaxes,
+        savings: form.savings,
+        supplements: form.supplements,
+      }),
+    [
+      form.adultBaseFare,
+      form.adultOtherCharges,
+      form.roomRate,
+      form.roomTaxes,
+      form.savings,
+      form.supplements,
+    ],
+  );
+
+  useEffect(() => {
+    setForm((f) => {
+      const next = {
+        ...f,
+        adultTotalFare: moneyDerived.adultTotalFareFmt,
+        totalRoomRate: moneyDerived.totalRoomRateFmt,
+        originalTotal: moneyDerived.originalTotalFmt,
+        totalDue: moneyDerived.totalDueFmt,
+      };
+      if (
+        f.adultTotalFare === next.adultTotalFare &&
+        f.totalRoomRate === next.totalRoomRate &&
+        f.originalTotal === next.originalTotal &&
+        f.totalDue === next.totalDue
+      )
+        return f;
+      return next;
     });
-  }, []);
+  }, [moneyDerived]);
+
+  const exportPdf = useCallback(async () => {
+    if (pdfExporting) return;
+    setPdfExporting(true);
+    try {
+      setShowPreview(true);
+      setTab("preview");
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => resolve()),
+        ),
+      );
+      const { exportItineraryPdfToFile } = await import(
+        "./exportItineraryPdf"
+      );
+      await exportItineraryPdfToFile(
+        title.trim() || "itinerary",
+      );
+    } catch (e) {
+      console.error(e);
+      window.alert(
+        "Could not generate the PDF file. Try again or switch browsers if it keeps failing.",
+      );
+    } finally {
+      setPdfExporting(false);
+    }
+  }, [title, pdfExporting]);
 
   const setF = (field: keyof FormData, value: unknown) =>
     setForm((f) => ({ ...f, [field]: value }));
@@ -1905,11 +1099,12 @@ function EditorView({
         </div>
         <button
           type="button"
-          onClick={exportPdf}
-          className="flex items-center gap-1.5 bg-accent text-accent-foreground px-3.5 py-1.5 rounded-lg text-xs font-semibold hover:opacity-90 transition-opacity shrink-0"
+          disabled={pdfExporting}
+          onClick={() => void exportPdf()}
+          className="flex items-center gap-1.5 bg-accent text-accent-foreground px-3.5 py-1.5 rounded-lg text-xs font-semibold hover:opacity-90 transition-opacity shrink-0 disabled:opacity-60 disabled:pointer-events-none"
         >
           <FileDown size={13} />
-          Export PDF
+          {pdfExporting ? "Building PDF…" : "Export PDF"}
         </button>
       </header>
 
@@ -2491,6 +1686,26 @@ function EditorView({
               icon={<CreditCard size={14} />}
               open={false}
             >
+              <label className="flex items-start gap-2.5 cursor-pointer rounded-lg border border-border bg-muted/20 px-3 py-2.5 mb-4">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 rounded border-border"
+                  checked={form.hidePricingOnPdf}
+                  onChange={(e) =>
+                    setF("hidePricingOnPdf", e.target.checked)
+                  }
+                />
+                <span className="text-xs leading-snug">
+                  <span className="font-semibold text-foreground">
+                    Hide prices on itinerary PDF
+                  </span>
+                  <span className="block text-muted-foreground mt-0.5">
+                    Omits fares, totals, supplement amounts, and
+                    penalty charges from the exported document.
+                    Editors still show computed amounts here.
+                  </span>
+                </span>
+              </label>
               <div className="grid grid-cols-2 gap-5">
                 <div>
                   <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-3">
@@ -2519,13 +1734,12 @@ function EditorView({
                         }
                       />
                     </Field>
-                    <Field label="Total adult fare">
+                    <Field label="Total adult fare (computed)">
                       <input
-                        className={`${inp} font-mono`}
+                        className={`${inp} font-mono bg-muted/50 cursor-default`}
+                        readOnly
                         value={form.adultTotalFare}
-                        onChange={(e) =>
-                          setF("adultTotalFare", e.target.value)
-                        }
+                        title="Sum of base fare and other charges"
                       />
                     </Field>
                   </div>
@@ -2554,13 +1768,12 @@ function EditorView({
                         }
                       />
                     </Field>
-                    <Field label="Total room rate">
+                    <Field label="Total room rate (computed)">
                       <input
-                        className={`${inp} font-mono`}
+                        className={`${inp} font-mono bg-muted/50 cursor-default`}
+                        readOnly
                         value={form.totalRoomRate}
-                        onChange={(e) =>
-                          setF("totalRoomRate", e.target.value)
-                        }
+                        title="Room rate plus taxes and fees"
                       />
                     </Field>
                   </div>
@@ -2575,13 +1788,12 @@ function EditorView({
               open={false}
             >
               <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
-                <Field label="Original total (PHP)">
+                <Field label="Original total — PHP (computed)">
                   <input
-                    className={`${inp} font-mono line-through text-muted-foreground`}
+                    className={`${inp} font-mono line-through text-muted-foreground bg-muted/50 cursor-default`}
+                    readOnly
                     value={form.originalTotal}
-                    onChange={(e) =>
-                      setF("originalTotal", e.target.value)
-                    }
+                    title="Adult fare + room + supplements (before savings)"
                   />
                 </Field>
                 <Field label="Bundle savings (PHP)">
@@ -2591,16 +1803,16 @@ function EditorView({
                     onChange={(e) =>
                       setF("savings", e.target.value)
                     }
+                    placeholder="0.00"
                   />
                 </Field>
                 <div className="pt-2 border-t border-border">
-                  <Field label="Total due (PHP)">
+                  <Field label="Total due — PHP (computed)">
                     <input
-                      className={`${inp} font-mono text-base font-bold`}
+                      className={`${inp} font-mono text-base font-bold bg-muted/50 cursor-default`}
+                      readOnly
                       value={form.totalDue}
-                      onChange={(e) =>
-                        setF("totalDue", e.target.value)
-                      }
+                      title="Original total minus bundle savings"
                     />
                   </Field>
                 </div>
