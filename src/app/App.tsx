@@ -130,6 +130,9 @@ const blankFlight: Flight = {
   baggage: "",
 };
 
+/** Shown beside the logo in the app chrome (defaults match itinerary form defaults). */
+const BRAND_SHELL_NAME = "Lyzius Travel & Tours";
+
 const blankForm: FormData = {
   agencyName: "Lyzius Travel & Tours",
   agencyTagline: "Curated Travel Experiences",
@@ -2287,14 +2290,26 @@ function ListView({
       <header className="bg-card border-b border-border sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-6 py-5 flex items-start justify-between">
           <div>
-            <div className="mb-3">
+            <div className="mb-3 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
               <img
                 src="/lyzius-logo.png"
-                alt="Lyzius Travel and Tours — Crafting Journeys, Creating Memories"
-                className="h-14 sm:h-[4.25rem] w-auto max-w-[min(100%,340px)] object-contain object-left"
+                alt=""
+                aria-hidden
+                className="h-14 sm:h-[4.25rem] w-auto max-w-[200px] sm:max-w-[220px] object-contain object-left shrink-0"
                 loading="eager"
                 decoding="async"
               />
+              <div className="min-w-0 sm:border-l sm:border-border sm:pl-4 pt-1 sm:pt-0">
+                <p
+                  className="text-[1.35rem] sm:text-2xl font-semibold text-foreground leading-snug text-balance"
+                  style={{
+                    fontFamily: "'Playfair Display', serif",
+                    letterSpacing: "-0.025em",
+                  }}
+                >
+                  {BRAND_SHELL_NAME}
+                </p>
+              </div>
             </div>
             <h1
               className="text-[26px] font-semibold text-foreground leading-tight"
