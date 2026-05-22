@@ -1,3 +1,38 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+
+@media print {
+  @page {
+    size: auto;
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    height: auto !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    background: white !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  #itinerary-pdf-print-root,
+  #itinerary-pdf-print-root * {
+    visibility: visible !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  #itinerary-pdf-print-root {
+    position: static !important;
+    width: auto !important;
+    min-height: auto !important;
+    background: transparent !important;
+  }
+}

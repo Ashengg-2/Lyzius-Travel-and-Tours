@@ -28,16 +28,7 @@ import {
   X,
   Eye,
   EyeOff,
-  CalendarIcon,
 } from "lucide-react";
-
-import { Button } from "./components/ui/button";
-import { Calendar } from "./components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "./components/ui/popover";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -71,6 +62,20 @@ interface CanRow {
   charge: string;
 }
 
+interface Passenger {
+  id: string;
+  honorific: string;
+  firstName: string;
+  lastName: string;
+  passengerType: string;
+  birthdate: string;
+  nationality: string;
+  passportNo: string;
+  passportExpiry: string;
+  issuingCountry: string;
+  dateIssued: string;
+}
+
 interface FormData {
   agencyName: string;
   agencyTagline: string;
@@ -92,16 +97,7 @@ interface FormData {
   contactName: string;
   contactPhone: string;
   contactEmail: string;
-  honorific: string;
-  firstName: string;
-  lastName: string;
-  passengerType: string;
-  birthdate: string;
-  nationality: string;
-  passportNo: string;
-  passportExpiry: string;
-  issuingCountry: string;
-  dateIssued: string;
+  passengers: Passenger[];
   adultBaseFare: string;
   adultOtherCharges: string;
   adultTotalFare: string;
@@ -153,19 +149,47 @@ function formatDateDisp(raw: string): string {
   });
 }
 
-function calendarOnlyToIso(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+function passengerDisplayLine(p: Passenger): string {
+  const fn = p.firstName.trim();
+  const ln = p.lastName.trim();
+  const honorRaw = (p.honorific ?? "").trim();
+  const honor = honorRaw.replace(/\s+$/, "") || "MR.";
+  if (!fn && !ln) return "";
+  return [honor, fn, ln].filter(Boolean).join(" ");
+}
+
+/** Search text over all traveler fields + formatted dates */
+function passengerSearchBlob(form: FormData): string {
+  return form.passengers
+    .map((p) =>
+      [
+        p.honorific,
+        p.firstName,
+        p.lastName,
+        p.passengerType,
+        p.nationality,
+        p.passportNo,
+        p.issuingCountry,
+        formatDateDisp(p.birthdate),
+        formatDateDisp(p.passportExpiry),
+        formatDateDisp(p.dateIssued),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase(),
+    )
+    .join("|");
 }
 
 function deriveClient(form: FormData): string {
-  const fn = form.firstName.trim();
-  const ln = form.lastName.trim();
-  if (!fn && !ln) return "";
-  const honor = form.honorific.trim().replace(/\s+$/, "") || "MR.";
-  return [honor, fn, ln].filter(Boolean).join(" ");
+  const lines = form.passengers
+    .map(passengerDisplayLine)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!lines.length) return "";
+  const first = lines[0]!;
+  if (lines.length === 1) return first;
+  return `${first} +${lines.length - 1}`;
 }
 
 function deriveDestination(form: FormData): string {
@@ -210,26 +234,31 @@ function deriveListSlice(form: FormData): Pick<
   };
 }
 
-function loadStoredItineraries(): Itinerary[] {
-  try {
-    const raw = localStorage.getItem(ITIN_STORAGE_KEY);
-    if (!raw) return [];
-    const data = JSON.parse(raw) as unknown;
-    if (!Array.isArray(data)) return [];
-    return data.filter(
-      (row): row is Itinerary =>
-        row &&
-        typeof row === "object" &&
-        typeof (row as Itinerary).id === "string" &&
-        (row as Itinerary).form != null &&
-        typeof (row as Itinerary).form === "object",
-    );
-  } catch {
-    return [];
+
+
+
+function newPassengerId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
   }
+  return `p_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 }
 
-// ─── Default blanks (new itineraries) ────────────────────────────────────────
+function blankPassenger(): Passenger {
+  return {
+    id: newPassengerId(),
+    honorific: "MR.",
+    firstName: "",
+    lastName: "",
+    passengerType: "Adult",
+    birthdate: "",
+    nationality: "",
+    passportNo: "",
+    passportExpiry: "",
+    issuingCountry: "",
+    dateIssued: "",
+  };
+}
 
 const blankFlight: Flight = {
   route: "",
@@ -272,16 +301,7 @@ const blankForm: FormData = {
   contactName: "",
   contactPhone: "",
   contactEmail: "",
-  honorific: "MR.",
-  firstName: "",
-  lastName: "",
-  passengerType: "Adult",
-  birthdate: "",
-  nationality: "",
-  passportNo: "",
-  passportExpiry: "",
-  issuingCountry: "",
-  dateIssued: "",
+  passengers: [],
   adultBaseFare: "",
   adultOtherCharges: "",
   adultTotalFare: "",
@@ -293,6 +313,157 @@ const blankForm: FormData = {
   totalDue: "",
   internalNotes: "",
 };
+
+function strField(raw: unknown, fallback = ""): string {
+  return typeof raw === "string" ? raw : fallback;
+}
+
+function coerceFlightStored(raw: unknown, template: Flight): Flight {
+  if (!raw || typeof raw !== "object") return { ...template };
+  const r = raw as Record<string, unknown>;
+  const next: Flight = { ...template };
+  (Object.keys(template) as (keyof Flight)[]).forEach((k) => {
+    const v = r[k as string];
+    if (typeof v === "string") next[k] = v;
+  });
+  return next;
+}
+
+function coerceSupRowStored(raw: unknown): SupRow | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const id =
+    typeof r.id === "string" ? r.id : `${Date.now()}_${Math.random()}`;
+  return {
+    id,
+    desc: strField(r.desc),
+    amount: strField(r.amount),
+    chargeType: strField(r.chargeType, "Pay at hotel"),
+  };
+}
+
+function coerceCanRowStored(raw: unknown): CanRow | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const id =
+    typeof r.id === "string" ? r.id : `${Date.now()}_${Math.random()}`;
+  return {
+    id,
+    rule: strField(r.rule),
+    charge: strField(r.charge),
+  };
+}
+
+function coercePassenger(raw: unknown): Passenger {
+  const r =
+    raw && typeof raw === "object"
+      ? (raw as Record<string, unknown>)
+      : {};
+  const pid = strField(r.id).trim() || newPassengerId();
+  return {
+    id: pid,
+    honorific: strField(r.honorific, "MR.") || "MR.",
+    firstName: strField(r.firstName),
+    lastName: strField(r.lastName),
+    passengerType: strField(r.passengerType, "Adult") || "Adult",
+    birthdate: strField(r.birthdate),
+    nationality: strField(r.nationality),
+    passportNo: strField(r.passportNo),
+    passportExpiry: strField(r.passportExpiry),
+    issuingCountry: strField(r.issuingCountry),
+    dateIssued: strField(r.dateIssued),
+  };
+}
+
+function normalizeStoredForm(raw: unknown): FormData {
+  const p =
+    raw && typeof raw === "object"
+      ? (raw as Record<string, unknown>)
+      : {};
+
+  let passengers =
+    Array.isArray(p.passengers) && p.passengers.length > 0
+      ? (p.passengers as unknown[]).map((x) =>
+          coercePassenger(x),
+        )
+      : [];
+
+  if (passengers.length === 0)
+    passengers = [coercePassenger(p)];
+
+  const supplements = Array.isArray(p.supplements)
+    ? (p.supplements as unknown[])
+        .map((x) => coerceSupRowStored(x))
+        .filter((x): x is SupRow => x != null)
+    : [...blankForm.supplements];
+
+  const cancellationRows = Array.isArray(p.cancellationRows)
+    ? (p.cancellationRows as unknown[])
+        .map((x) => coerceCanRowStored(x))
+        .filter((x): x is CanRow => x != null)
+    : [...blankForm.cancellationRows];
+
+  return {
+    ...blankForm,
+    agencyName: strField(p.agencyName, blankForm.agencyName),
+    agencyTagline: strField(p.agencyTagline, blankForm.agencyTagline),
+    agencyFooter: strField(p.agencyFooter, blankForm.agencyFooter),
+    page1Heading: strField(p.page1Heading, blankForm.page1Heading),
+    outbound: coerceFlightStored(p.outbound, blankFlight),
+    returnFlight: coerceFlightStored(p.returnFlight, blankFlight),
+    hotelName: strField(p.hotelName),
+    hotelAddress: strField(p.hotelAddress),
+    hotelPhone: strField(p.hotelPhone),
+    checkIn: strField(p.checkIn),
+    checkOut: strField(p.checkOut),
+    roomDesc: strField(p.roomDesc),
+    inclusions: strField(p.inclusions),
+    supplements,
+    cancellationRows,
+    noShow: strField(p.noShow),
+    ratesConditions: strField(p.ratesConditions),
+    contactName: strField(p.contactName),
+    contactPhone: strField(p.contactPhone),
+    contactEmail: strField(p.contactEmail),
+    passengers,
+    adultBaseFare: strField(p.adultBaseFare),
+    adultOtherCharges: strField(p.adultOtherCharges),
+    adultTotalFare: strField(p.adultTotalFare),
+    roomRate: strField(p.roomRate),
+    roomTaxes: strField(p.roomTaxes),
+    totalRoomRate: strField(p.totalRoomRate),
+    originalTotal: strField(p.originalTotal),
+    savings: strField(p.savings),
+    totalDue: strField(p.totalDue),
+    internalNotes: strField(p.internalNotes),
+  };
+}
+
+function loadStoredItineraries(): Itinerary[] {
+  try {
+    const raw = localStorage.getItem(ITIN_STORAGE_KEY);
+    if (!raw) return [];
+    const data = JSON.parse(raw) as unknown;
+    if (!Array.isArray(data)) return [];
+
+    type RawItin = Omit<Itinerary, "form"> & { form?: unknown };
+    const rows = data.filter(
+      (row): row is RawItin =>
+        row != null &&
+        typeof row === "object" &&
+        typeof (row as RawItin).id === "string" &&
+        (row as RawItin).form != null &&
+        typeof (row as RawItin).form === "object",
+    );
+
+    return rows.map((row) => ({
+      ...row,
+      form: normalizeStoredForm(row.form),
+    })) as Itinerary[];
+  } catch {
+    return [];
+  }
+}
 
 // ─── Shared UI helpers ────────────────────────────────────────────────────────
 
@@ -318,65 +489,38 @@ function Field({
   );
 }
 
-function DatePopoverField({
+function DatePickerInput({
   value,
   onChange,
-  placeholder = "Pick a date",
+  placeholder,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const parsed = isoToLocalDate(value);
-  const hasValue = Boolean(value.trim());
-  const shown = hasValue ? formatDateDisp(value) : placeholder;
+  const normalized = isoDateRx.test(value.trim())
+    ? value.trim()
+    : "";
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
+    <div className="flex flex-wrap items-stretch gap-2">
+      <input
+        type="date"
+        title={placeholder}
+        className={`${inp} min-h-[2.375rem] min-w-[10rem] flex-1 font-mono text-sm tabular-nums scheme-light dark:scheme-dark`}
+        value={normalized}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {normalized ? (
+        <button
           type="button"
-          variant="outline"
-          className={`${inp} h-auto min-h-[2.375rem] justify-between font-normal text-left`}
+          className="shrink-0 rounded-lg border border-border bg-background px-2.5 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          onClick={() => onChange("")}
         >
-          <span className={hasValue ? "" : "text-muted-foreground/65"}>
-            {shown}
-          </span>
-          <CalendarIcon
-            size={15}
-            className="opacity-65 shrink-0"
-          />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
-        <Calendar
-          mode="single"
-          selected={parsed}
-          onSelect={(d) => {
-            if (d) {
-              onChange(calendarOnlyToIso(d));
-              setOpen(false);
-            }
-          }}
-          initialFocus
-        />
-        {hasValue && (
-          <div className="border-t border-border px-2 py-1.5">
-            <button
-              type="button"
-              className="w-full rounded-md py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-              onClick={() => {
-                onChange("");
-                setOpen(false);
-              }}
-            >
-              Clear date
-            </button>
-          </div>
-        )}
-      </PopoverContent>
-    </Popover>
+          Clear
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -393,7 +537,7 @@ function Sec({
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   return (
-    <div className="rounded-xl border border-border overflow-hidden shadow-sm">
+    <div className="rounded-xl border border-border shadow-sm">
       <button
         type="button"
         onClick={() => setIsOpen((o) => !o)}
@@ -586,6 +730,58 @@ function PdfFlightBlock({
   );
 }
 
+/** Logo + agency name/tagline used in PDF preview headers */
+function PdfBrandBlock({ form }: { form: FormData }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 12,
+      }}
+    >
+      <img
+        src="/lyzius-logo.png"
+        alt=""
+        style={{
+          height: 42,
+          width: "auto",
+          maxWidth: 120,
+          objectFit: "contain",
+          objectPosition: "left center",
+          flexShrink: 0,
+        }}
+        loading="eager"
+      />
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 15,
+            fontWeight: 700,
+            color: "#EDE9E2",
+            fontFamily: "'Playfair Display', serif",
+            letterSpacing: "-0.02em",
+          }}
+        >
+          {form.agencyName || "Agency Name"}
+        </div>
+        {form.agencyTagline ? (
+          <div
+            style={{
+              fontSize: 8,
+              color: "#7A7470",
+              marginTop: 2,
+              letterSpacing: "0.08em",
+            }}
+          >
+            {form.agencyTagline}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function PDFPreview({ form }: { form: FormData }) {
   const [zoom, setZoom] = useState(0.65);
   const zoomLevels: [number, string][] = [
@@ -617,9 +813,12 @@ function PDFPreview({ form }: { form: FormData }) {
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#161412]">
+    <div
+      id="itinerary-pdf-print-root"
+      className="flex flex-col h-full bg-[#161412]"
+    >
       {/* Zoom controls */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/8 shrink-0">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/8 shrink-0 print:hidden">
         <span className="text-[11px] text-white/30 font-mono tracking-widest">
           A4 · PREVIEW
         </span>
@@ -664,31 +863,7 @@ function PDFPreview({ form }: { form: FormData }) {
             <div style={pageStyle}>
               {/* Header */}
               <div style={headerBorder}>
-                <div>
-                  <div
-                    style={{
-                      fontSize: 15,
-                      fontWeight: 700,
-                      color: "#EDE9E2",
-                      fontFamily: "'Playfair Display', serif",
-                      letterSpacing: "-0.02em",
-                    }}
-                  >
-                    {form.agencyName || "Agency Name"}
-                  </div>
-                  {form.agencyTagline && (
-                    <div
-                      style={{
-                        fontSize: 8,
-                        color: "#7A7470",
-                        marginTop: 2,
-                        letterSpacing: "0.08em",
-                      }}
-                    >
-                      {form.agencyTagline}
-                    </div>
-                  )}
-                </div>
+                <PdfBrandBlock form={form} />
                 <div
                   style={{
                     fontSize: 11,
@@ -974,31 +1149,7 @@ function PDFPreview({ form }: { form: FormData }) {
             <div style={pageStyle}>
               {/* Header */}
               <div style={headerBorder}>
-                <div>
-                  <div
-                    style={{
-                      fontSize: 15,
-                      fontWeight: 700,
-                      color: "#EDE9E2",
-                      fontFamily: "'Playfair Display', serif",
-                      letterSpacing: "-0.02em",
-                    }}
-                  >
-                    {form.agencyName || "Agency Name"}
-                  </div>
-                  {form.agencyTagline && (
-                    <div
-                      style={{
-                        fontSize: 8,
-                        color: "#7A7470",
-                        marginTop: 2,
-                        letterSpacing: "0.08em",
-                      }}
-                    >
-                      {form.agencyTagline}
-                    </div>
-                  )}
-                </div>
+                <PdfBrandBlock form={form} />
                 <div
                   style={{
                     textAlign: "right" as const,
@@ -1022,64 +1173,75 @@ function PDFPreview({ form }: { form: FormData }) {
               </div>
 
               {/* Passenger */}
-              <PdfBlock title="Passenger Information">
-                <table
-                  style={{
-                    width: "100%",
-                    borderCollapse: "collapse",
-                  }}
+              {form.passengers.map((pas, idx) => (
+                <PdfBlock
+                  key={pas.id}
+                  title={
+                    form.passengers.length > 1
+                      ? `Passenger ${idx + 1}`
+                      : "Passenger Information"
+                  }
                 >
-                  <tbody>
-                    <PdfRow
-                      label="Full name"
-                      value={
-                        [
-                          form.honorific,
-                          form.firstName,
-                          form.lastName,
-                        ]
-                          .filter(Boolean)
-                          .join(" ") || "—"
-                      }
-                    />
-                    <PdfRow
-                      label="Passenger type"
-                      value={form.passengerType || "—"}
-                    />
-                    <PdfRow
-                      label="Date of birth"
-                      value={
-                        formatDateDisp(form.birthdate) || "—"
-                      }
-                    />
-                    <PdfRow
-                      label="Nationality"
-                      value={form.nationality || "—"}
-                    />
-                    <PdfRow
-                      label="Passport no."
-                      value={form.passportNo || "—"}
-                    />
-                    <PdfRow
-                      label="Passport expiry"
-                      value={
-                        formatDateDisp(form.passportExpiry) ||
-                        "—"
-                      }
-                    />
-                    <PdfRow
-                      label="Issuing country"
-                      value={form.issuingCountry || "—"}
-                    />
-                    <PdfRow
-                      label="Date issued"
-                      value={
-                        formatDateDisp(form.dateIssued) || "—"
-                      }
-                    />
-                  </tbody>
-                </table>
-              </PdfBlock>
+                  <table
+                    style={{
+                      width: "100%",
+                      borderCollapse: "collapse",
+                    }}
+                  >
+                    <tbody>
+                      <PdfRow
+                        label="Full name"
+                        value={
+                          passengerDisplayLine(pas) || "—"
+                        }
+                      />
+                      <PdfRow
+                        label="Passenger type"
+                        value={
+                          pas.passengerType.trim() || "—"
+                        }
+                      />
+                      <PdfRow
+                        label="Date of birth"
+                        value={
+                          formatDateDisp(pas.birthdate) || "—"
+                        }
+                      />
+                      <PdfRow
+                        label="Nationality"
+                        value={
+                          pas.nationality.trim() || "—"
+                        }
+                      />
+                      <PdfRow
+                        label="Passport no."
+                        value={
+                          pas.passportNo.trim() || "—"
+                        }
+                      />
+                      <PdfRow
+                        label="Passport expiry"
+                        value={
+                          formatDateDisp(pas.passportExpiry) ||
+                          "—"
+                        }
+                      />
+                      <PdfRow
+                        label="Issuing country"
+                        value={
+                          pas.issuingCountry.trim() || "—"
+                        }
+                      />
+                      <PdfRow
+                        label="Date issued"
+                        value={
+                          formatDateDisp(pas.dateIssued) || "—"
+                        }
+                      />
+                    </tbody>
+                  </table>
+                </PdfBlock>
+              ))}
 
               {/* Payment breakdown */}
               <div
@@ -1419,7 +1581,7 @@ function FlightFields({
         />
       </Field>
       <Field label="Dep. date">
-        <DatePopoverField
+        <DatePickerInput
           value={f.depDate}
           onChange={(v) => onChange("depDate", v)}
           placeholder="Departure date"
@@ -1454,7 +1616,7 @@ function FlightFields({
         />
       </Field>
       <Field label="Arr. date">
-        <DatePopoverField
+        <DatePickerInput
           value={f.arrDate}
           onChange={(v) => onChange("arrDate", v)}
           placeholder="Arrival date"
@@ -1494,10 +1656,12 @@ function EditorView({
   itinerary,
   onBack,
   onSave,
+  onDuplicate,
 }: {
   itinerary: Itinerary;
   onBack: () => void;
   onSave: (it: Itinerary) => void;
+  onDuplicate: () => void;
 }) {
   const [form, setForm] = useState<FormData>(itinerary.form);
   const [title, setTitle] = useState(itinerary.title);
@@ -1507,6 +1671,16 @@ function EditorView({
   const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState<"edit" | "preview">("edit");
   const [showPreview, setShowPreview] = useState(true);
+
+  const exportPdf = useCallback(() => {
+    setShowPreview(true);
+    setTab("preview");
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        window.print();
+      });
+    });
+  }, []);
 
   const setF = (field: keyof FormData, value: unknown) =>
     setForm((f) => ({ ...f, [field]: value }));
@@ -1570,6 +1744,33 @@ function EditorView({
       ),
     );
 
+  const updatePassenger = (
+    id: string,
+    field: keyof Omit<Passenger, "id">,
+    val: string,
+  ) =>
+    setForm((f) => ({
+      ...f,
+      passengers: f.passengers.map((p) =>
+        p.id === id ? { ...p, [field]: val } : p,
+      ),
+    }));
+
+  const addPassenger = () =>
+    setForm((f) => ({
+      ...f,
+      passengers: [...f.passengers, blankPassenger()],
+    }));
+
+  const removePassenger = (id: string) =>
+    setForm((f) => {
+      if (f.passengers.length <= 1) return f;
+      return {
+        ...f,
+        passengers: f.passengers.filter((p) => p.id !== id),
+      };
+    });
+
   const itineraryRef = useRef(itinerary);
   itineraryRef.current = itinerary;
 
@@ -1604,7 +1805,7 @@ function EditorView({
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
       {/* Top bar */}
-      <header className="bg-card border-b border-border flex items-center gap-3 px-4 h-[52px] shrink-0 z-20 shadow-sm">
+      <header className="bg-card border-b border-border flex items-center gap-3 px-4 h-[52px] shrink-0 z-20 shadow-sm print:hidden">
         <button
           onClick={onBack}
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors shrink-0"
@@ -1679,8 +1880,9 @@ function EditorView({
             <Eye size={15} />
           )}
         </button>
-        <div className="hidden lg:flex items-center gap-2 shrink-0">
+        <div className="hidden sm:flex items-center gap-2 shrink-0">
           <button
+            type="button"
             onClick={handleSave}
             className="px-3 py-1.5 text-xs font-semibold border border-border rounded-lg hover:bg-muted transition-colors text-foreground flex items-center gap-1.5"
           >
@@ -1693,11 +1895,19 @@ function EditorView({
               "Save draft"
             )}
           </button>
-          <button className="px-3 py-1.5 text-xs font-semibold border border-border rounded-lg hover:bg-muted transition-colors text-foreground flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onDuplicate}
+            className="px-3 py-1.5 text-xs font-semibold border border-border rounded-lg hover:bg-muted transition-colors text-foreground flex items-center gap-1.5"
+          >
             <Copy size={11} /> Duplicate
           </button>
         </div>
-        <button className="flex items-center gap-1.5 bg-accent text-accent-foreground px-3.5 py-1.5 rounded-lg text-xs font-semibold hover:opacity-90 transition-opacity shrink-0">
+        <button
+          type="button"
+          onClick={exportPdf}
+          className="flex items-center gap-1.5 bg-accent text-accent-foreground px-3.5 py-1.5 rounded-lg text-xs font-semibold hover:opacity-90 transition-opacity shrink-0"
+        >
           <FileDown size={13} />
           Export PDF
         </button>
@@ -1705,7 +1915,7 @@ function EditorView({
 
       {/* Mobile tab bar — only when PDF preview is enabled */}
       {showPreview ? (
-        <div className="lg:hidden flex border-b border-border bg-card shrink-0">
+        <div className="lg:hidden flex border-b border-border bg-card shrink-0 print:hidden">
           {(["edit", "preview"] as const).map((t) => (
             <button
               key={t}
@@ -1727,7 +1937,7 @@ function EditorView({
       <div className="flex-1 overflow-hidden flex min-h-0">
         {/* Form panel */}
         <div
-          className={`flex-1 overflow-y-auto ${
+          className={`flex-1 overflow-y-auto print:hidden ${
             showPreview && tab === "preview"
               ? "hidden lg:block"
               : ""
@@ -1857,14 +2067,14 @@ function EditorView({
                 </Field>
                 <div />
                 <Field label="Check-in date">
-                  <DatePopoverField
+                  <DatePickerInput
                     value={form.checkIn}
                     onChange={(v) => setF("checkIn", v)}
                     placeholder="Check-in date"
                   />
                 </Field>
                 <Field label="Check-out date">
-                  <DatePopoverField
+                  <DatePickerInput
                     value={form.checkOut}
                     onChange={(v) =>
                       setF("checkOut", v)
@@ -2085,119 +2295,193 @@ function EditorView({
               </div>
             </Sec>
 
-            {/* Passenger */}
+            {/* Passengers */}
             <Sec
-              title="Passenger"
+              title="Passengers"
               icon={<User size={14} />}
               open={false}
             >
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2 grid grid-cols-[76px_1fr_1fr] gap-2">
-                  <Field label="Title">
-                    <select
-                      className={inp}
-                      value={form.honorific}
-                      onChange={(e) =>
-                        setF("honorific", e.target.value)
-                      }
-                    >
-                      {[
-                        "MR.",
-                        "MS.",
-                        "MRS.",
-                        "DR.",
-                        "PROF.",
-                      ].map((h) => (
-                        <option key={h}>{h}</option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label="First name">
-                    <input
-                      className={inp}
-                      value={form.firstName}
-                      onChange={(e) =>
-                        setF("firstName", e.target.value)
-                      }
-                    />
-                  </Field>
-                  <Field label="Last name">
-                    <input
-                      className={inp}
-                      value={form.lastName}
-                      onChange={(e) =>
-                        setF("lastName", e.target.value)
-                      }
-                    />
-                  </Field>
-                </div>
-                <Field label="Passenger type">
-                  <select
-                    className={inp}
-                    value={form.passengerType}
-                    onChange={(e) =>
-                      setF("passengerType", e.target.value)
-                    }
+              <div className="space-y-5">
+                {form.passengers.map((pas, pasIdx) => (
+                  <div
+                    key={pas.id}
+                    className="rounded-xl border border-border bg-muted/20 p-4 space-y-3"
                   >
-                    <option>Adult</option>
-                    <option>Child</option>
-                  </select>
-                </Field>
-                <Field label="Date of birth">
-                  <DatePopoverField
-                    value={form.birthdate}
-                    onChange={(v) =>
-                      setF("birthdate", v)
-                    }
-                    placeholder="Date of birth"
-                  />
-                </Field>
-                <Field label="Nationality">
-                  <input
-                    className={inp}
-                    value={form.nationality}
-                    onChange={(e) =>
-                      setF("nationality", e.target.value)
-                    }
-                    placeholder="PHL"
-                  />
-                </Field>
-                <Field label="Passport no.">
-                  <input
-                    className={inp}
-                    value={form.passportNo}
-                    onChange={(e) =>
-                      setF("passportNo", e.target.value)
-                    }
-                  />
-                </Field>
-                <Field label="Passport expiry">
-                  <DatePopoverField
-                    value={form.passportExpiry}
-                    onChange={(v) =>
-                      setF("passportExpiry", v)
-                    }
-                    placeholder="Passport expiry"
-                  />
-                </Field>
-                <Field label="Issuing country">
-                  <input
-                    className={inp}
-                    value={form.issuingCountry}
-                    onChange={(e) =>
-                      setF("issuingCountry", e.target.value)
-                    }
-                  />
-                </Field>
-                <Field label="Date issued">
-                  <DatePopoverField
-                    value={form.dateIssued}
-                    onChange={(v) =>
-                      setF("dateIssued", v)
-                    }
-                    placeholder="Passport issued on"
-                  />
-                </Field>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+                        Traveler
+                        {form.passengers.length > 1
+                          ? ` ${pasIdx + 1}`
+                          : ""}
+                      </p>
+                      {form.passengers.length > 1 ? (
+                        <button
+                          type="button"
+                          className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-muted transition-colors shrink-0"
+                          aria-label={`Remove traveler ${pasIdx + 1}`}
+                          onClick={() => removePassenger(pas.id)}
+                        >
+                          <X size={13} />
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="col-span-2 grid grid-cols-[76px_1fr_1fr] gap-2">
+                        <Field label="Title">
+                          <select
+                            className={inp}
+                            value={pas.honorific}
+                            onChange={(e) =>
+                              updatePassenger(
+                                pas.id,
+                                "honorific",
+                                e.target.value,
+                              )
+                            }
+                          >
+                            {[
+                              "MR.",
+                              "MS.",
+                              "MRS.",
+                              "DR.",
+                              "PROF.",
+                            ].map((h) => (
+                              <option key={h}>{h}</option>
+                            ))}
+                          </select>
+                        </Field>
+                        <Field label="First name">
+                          <input
+                            className={inp}
+                            value={pas.firstName}
+                            onChange={(e) =>
+                              updatePassenger(
+                                pas.id,
+                                "firstName",
+                                e.target.value,
+                              )
+                            }
+                          />
+                        </Field>
+                        <Field label="Last name">
+                          <input
+                            className={inp}
+                            value={pas.lastName}
+                            onChange={(e) =>
+                              updatePassenger(
+                                pas.id,
+                                "lastName",
+                                e.target.value,
+                              )
+                            }
+                          />
+                        </Field>
+                      </div>
+                      <Field label="Passenger type">
+                        <select
+                          className={inp}
+                          value={pas.passengerType}
+                          onChange={(e) =>
+                            updatePassenger(
+                              pas.id,
+                              "passengerType",
+                              e.target.value,
+                            )
+                          }
+                        >
+                          <option>Adult</option>
+                          <option>Child</option>
+                        </select>
+                      </Field>
+                      <Field label="Date of birth">
+                        <DatePickerInput
+                          value={pas.birthdate}
+                          onChange={(v) =>
+                            updatePassenger(
+                              pas.id,
+                              "birthdate",
+                              v,
+                            )
+                          }
+                          placeholder="Date of birth"
+                        />
+                      </Field>
+                      <Field label="Nationality">
+                        <input
+                          className={inp}
+                          value={pas.nationality}
+                          onChange={(e) =>
+                            updatePassenger(
+                              pas.id,
+                              "nationality",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="PHL"
+                        />
+                      </Field>
+                      <Field label="Passport no.">
+                        <input
+                          className={inp}
+                          value={pas.passportNo}
+                          onChange={(e) =>
+                            updatePassenger(
+                              pas.id,
+                              "passportNo",
+                              e.target.value,
+                            )
+                          }
+                        />
+                      </Field>
+                      <Field label="Passport expiry">
+                        <DatePickerInput
+                          value={pas.passportExpiry}
+                          onChange={(v) =>
+                            updatePassenger(
+                              pas.id,
+                              "passportExpiry",
+                              v,
+                            )
+                          }
+                          placeholder="Passport expiry"
+                        />
+                      </Field>
+                      <Field label="Issuing country">
+                        <input
+                          className={inp}
+                          value={pas.issuingCountry}
+                          onChange={(e) =>
+                            updatePassenger(
+                              pas.id,
+                              "issuingCountry",
+                              e.target.value,
+                            )
+                          }
+                        />
+                      </Field>
+                      <Field label="Date issued">
+                        <DatePickerInput
+                          value={pas.dateIssued}
+                          onChange={(v) =>
+                            updatePassenger(
+                              pas.id,
+                              "dateIssued",
+                              v,
+                            )
+                          }
+                          placeholder="Passport issued on"
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addPassenger}
+                  className="text-xs text-accent hover:opacity-75 font-semibold flex items-center gap-1 transition-opacity"
+                >
+                  <Plus size={12} /> Add passenger
+                </button>
               </div>
             </Sec>
 
@@ -2478,10 +2762,12 @@ function ListView({
       filter === "all" || it.status === filter;
     const q = search.toLowerCase();
     const passengerLc = deriveClient(it.form).toLowerCase();
+    const passengerBlob = passengerSearchBlob(it.form);
     const matchSearch =
       !q ||
       it.client.toLowerCase().includes(q) ||
       passengerLc.includes(q) ||
+      passengerBlob.includes(q) ||
       it.destination.toLowerCase().includes(q) ||
       it.title.toLowerCase().includes(q) ||
       it.travelStart.toLowerCase().includes(q);
@@ -2752,32 +3038,54 @@ export default function App() {
 
   const handleNew = () => {
     const id = Date.now().toString();
+    const nf: FormData = {
+      ...blankForm,
+      outbound: { ...blankFlight },
+      returnFlight: { ...blankFlight },
+      passengers: [blankPassenger()],
+      supplements: [],
+      cancellationRows: [],
+    };
+    const slice = deriveListSlice(nf);
     const it: Itinerary = {
       id,
       title: "New Itinerary",
-      client: "",
-      destination: "",
-      travelStart: "",
-      travelEnd: "",
       status: "draft",
       lastUpdated: "Just now",
-      form: { ...blankForm },
+      ...slice,
+      form: nf,
     };
     setItineraries((prev) => [it, ...prev]);
     setEditingId(id);
   };
 
-  const handleDuplicate = (id: string) => {
+  const handleDuplicate = (id: string): string | null => {
     const src = itineraries.find((it) => it.id === id);
-    if (!src) return;
+    if (!src) return null;
+    const newId = Date.now().toString();
+    const nf: FormData = {
+      ...src.form,
+      outbound: { ...src.form.outbound },
+      returnFlight: { ...src.form.returnFlight },
+      supplements: [...src.form.supplements],
+      cancellationRows: [...src.form.cancellationRows],
+      passengers: src.form.passengers.map((p) => ({
+        ...p,
+        id: newPassengerId(),
+      })),
+    };
+    const slice = deriveListSlice(nf);
     const dup: Itinerary = {
       ...src,
-      id: Date.now().toString(),
+      id: newId,
       title: `${src.title} (copy)`,
       status: "draft",
       lastUpdated: "Just now",
+      ...slice,
+      form: nf,
     };
     setItineraries((prev) => [dup, ...prev]);
+    return newId;
   };
 
   const handleDelete = (id: string) => {
