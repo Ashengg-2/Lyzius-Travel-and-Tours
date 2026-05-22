@@ -37,14 +37,25 @@ export interface ItineraryPdfContext {
   hidePricing: boolean;
 }
 
-function PdfRow({ label, value }: { label: string; value: string }) {
+function PdfRow({
+  label,
+  value,
+  compact,
+}: {
+  label: string;
+  value: string;
+  compact?: boolean;
+}) {
+  const pad = compact ? "3px 8px" : "5px 10px";
+  const fs = compact ? 7.85 : 8.5;
+  const lh = compact ? 1.35 : 1.5;
   return (
     <tr>
       <td
         style={{
-          padding: "5px 10px",
+          padding: pad,
           color: P.muted,
-          fontSize: 8.5,
+          fontSize: fs,
           width: "38%",
           borderBottom: `1px solid ${P.border}`,
           verticalAlign: "top",
@@ -54,11 +65,11 @@ function PdfRow({ label, value }: { label: string; value: string }) {
       </td>
       <td
         style={{
-          padding: "5px 10px",
+          padding: pad,
           color: P.ink,
           borderBottom: `1px solid ${P.border}`,
           verticalAlign: "top",
-          lineHeight: 1.5,
+          lineHeight: lh,
         }}
       >
         {value}
@@ -70,20 +81,22 @@ function PdfRow({ label, value }: { label: string; value: string }) {
 function PdfBlock({
   title,
   children,
+  compact,
 }: {
   title: string;
   children: React.ReactNode;
+  compact?: boolean;
 }) {
   return (
-    <div style={{ marginBottom: 14 }}>
+    <div style={{ marginBottom: compact ? 8 : 14 }}>
       <div
         style={{
-          fontSize: 7.5,
+          fontSize: compact ? 7 : 7.5,
           fontWeight: 700,
           letterSpacing: "0.14em",
           textTransform: "uppercase" as const,
           color: P.faint,
-          marginBottom: 5,
+          marginBottom: compact ? 3 : 5,
         }}
       >
         {title}
@@ -223,8 +236,8 @@ function chunkPassengers<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-/** One traveler per sheet — avoids clipping tall passport blocks in html2canvas export */
-const PASSENGERS_PER_PAGE = 1;
+/** Two travelers per passenger sheet — split across pages without 1:1 page inflation */
+const PASSENGERS_PER_PAGE = 2;
 
 export function countItineraryPdfPages(passengerCount: number): number {
   const chunks = Math.max(
@@ -260,6 +273,13 @@ export function buildItineraryPdfPageFactories(
     marginBottom: 22,
     paddingBottom: 14,
     borderBottom: `1px solid ${P.borderStrong}`,
+  };
+
+  /** Slightly tighter header on passenger sheets to fit two traveler blocks */
+  const headerPassengerStyle: React.CSSProperties = {
+    ...headerBookingStyle,
+    marginBottom: 16,
+    paddingBottom: 10,
   };
 
   const factories: Array<() => React.ReactElement> = [];
@@ -520,7 +540,7 @@ export function buildItineraryPdfPageFactories(
     factories.push(() => {
       return (
         <>
-          <div style={headerBookingStyle}>
+          <div style={headerPassengerStyle}>
             <PdfBrandBlock form={form} />
             <div style={{ textAlign: "right" as const }}>
               <div
@@ -549,6 +569,7 @@ export function buildItineraryPdfPageFactories(
 
           {chunk.map((pas, idxWithin) => (
             <PdfBlock
+              compact
               key={pas.id}
               title={
                 form.passengers.length > 1
@@ -564,36 +585,42 @@ export function buildItineraryPdfPageFactories(
               >
                 <tbody>
                   <PdfRow
+                    compact
                     label="Full name"
                     value={
                       passengerDisplayLine(pas) || "—"
                     }
                   />
                   <PdfRow
+                    compact
                     label="Passenger type"
                     value={
                       pas.passengerType.trim() || "—"
                     }
                   />
                   <PdfRow
+                    compact
                     label="Date of birth"
                     value={
                       formatDateDisp(pas.birthdate) || "—"
                     }
                   />
                   <PdfRow
+                    compact
                     label="Nationality"
                     value={
                       pas.nationality.trim() || "—"
                     }
                   />
                   <PdfRow
+                    compact
                     label="Passport no."
                     value={
                       pas.passportNo.trim() || "—"
                     }
                   />
                   <PdfRow
+                    compact
                     label="Passport expiry"
                     value={
                       formatDateDisp(pas.passportExpiry) ||
@@ -601,12 +628,14 @@ export function buildItineraryPdfPageFactories(
                     }
                   />
                   <PdfRow
+                    compact
                     label="Issuing country"
                     value={
                       pas.issuingCountry.trim() || "—"
                     }
                   />
                   <PdfRow
+                    compact
                     label="Date issued"
                     value={
                       formatDateDisp(pas.dateIssued) || "—"
