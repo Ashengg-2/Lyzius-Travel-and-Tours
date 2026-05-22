@@ -75,8 +75,17 @@ Same idea:
 
 - **Build**: `npm install && npm install --prefix server && npm run build`
 - **Start**: `npm start`
-- **Env vars** same as Railway.
-- Attach **PostgreSQL** or use Neon + **`DATABASE_URL`**.
+- **Env vars** same as Railway (above table).
+
+### PostgreSQL — set `DATABASE_URL` (fixes Render P1012)
+
+`npm start` runs **`prisma migrate deploy`**. **`DATABASE_URL`** must exist at runtime (`server/.env` does not ship in Git):
+
+1. **Create** PostgreSQL on Render (or use Neon → paste URI).
+2. **Web Service → Environment → Link database** → pick Postgres → **`DATABASE_URL`** is usually injected.
+3. Otherwise: Postgres dashboard → copy **External** (or Internal) URI → Web Service env → **`DATABASE_URL`** = pasted value (often **`?sslmode=require`**).
+
+Also **`JWT_SECRET`**, **`NODE_ENV`=`production`**, **`FRONTEND_ORIGIN`** = your live site URL (`https://…onrender.com`).
 
 ---
 
@@ -102,6 +111,7 @@ The React app still loads data **from in-memory state** unless you wired **`fetc
 
 ## Troubleshooting
 
+- **Build fails with `vite: not found`:** Render/Heroku often use **`NODE_ENV=production`** for installs, which skips **`devDependencies`**. Either move Vite (+ Tailwind) into **`dependencies`** (this repo does that), or change the Render **Build command** to `npm install --include=dev && npm install --prefix server --include=dev && npm run build`.
 - **Blank page / 404 on `/`:** Confirm **`NODE_ENV=production`**, **`npm run build` ran from repo root** (there is a **`dist/index.html`** next to **`server/`**), **`SERVE_FRONTEND` ≠ `false`**.
 - **CORS errors:** **`FRONTEND_ORIGIN`** must match the browser origin (scheme + host + port).
 - **Prisma migrations fail:** `DATABASE_URL` wrong or Postgres schema not migrated; see **`server/docs/using-postgresql.md`**.

@@ -10,6 +10,20 @@ const serverRoot = dirname(fileURLToPath(import.meta.url));
 loadDotenv({ path: resolve(serverRoot, ".env"), override: true });
 const dbUrl = process.env.DATABASE_URL?.trim() ?? "";
 
+if (!dbUrl) {
+  console.error(`
+[server/prisma.config.ts] DATABASE_URL is not set after loading server/.env (if present).
+Prisma needs this env var — it is never committed to Git (.gitignore blocks server/.env).
+
+Hosting (Render, Railway):
+  • Create Postgres → Web Service Environment → Link database (recommended), or manually add DATABASE_URL from the Postgres "Connection"/"Credentials" URI.
+  • URLs often look like: postgresql://user:password@host/db?sslmode=require
+
+Local dev: copy server/.env.example → server/.env and set DATABASE_URL.
+`);
+  process.exit(1);
+}
+
 /** Repo Compose maps Docker Postgres to host :5433; :5432 is often a native Windows Postgres install → P1000. */
 const usesComposeUserOn5432 =
   /\bpostgresql:\/\/lyzius:[^@]+@(localhost|127\.0\.0\.1):5432\/lyzius\b/i.test(
