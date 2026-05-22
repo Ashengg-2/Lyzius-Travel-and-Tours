@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+/// Production (Render): set `DATABASE_URL` to Postgres (often `postgresql://...@...`).
+/// Local dev: same, or Docker / Render external connection string — see `.env.example`.
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id           String       @id @default(cuid())
+  name         String
+  createdAt    DateTime     @default(now())
+  users        User[]
+  itineraries  Itinerary[]
+}
+
+model User {
+  id             String       @id @default(cuid())
+  email          String       @unique
+  passwordHash   String
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+}
+
+model Itinerary {
+  id               String       @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  title            String
+  client           String
+  destination      String
+  travelStart      String
+  travelEnd        String
+  status           String // draft | ready
+  lastUpdated      DateTime      @updatedAt
+  form             Json
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+}
