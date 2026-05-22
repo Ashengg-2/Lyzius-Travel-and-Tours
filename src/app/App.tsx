@@ -1,4 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   ArrowLeft,
   Plus,
@@ -23,7 +28,16 @@ import {
   X,
   Eye,
   EyeOff,
+  CalendarIcon,
 } from "lucide-react";
+
+import { Button } from "./components/ui/button";
+import { Calendar } from "./components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "./components/ui/popover";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -112,6 +126,109 @@ interface Itinerary {
   form: FormData;
 }
 
+const ITIN_STORAGE_KEY = "lyzius.itineraries.v1";
+
+const isoDateRx = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+function isoToLocalDate(raw: string): Date | undefined {
+  const iso = raw.trim();
+  const m = iso.match(isoDateRx);
+  if (!m) return undefined;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (!y || mo < 1 || mo > 12 || d < 1 || d > 31) return undefined;
+  const dt = new Date(y, mo - 1, d);
+  return Number.isNaN(dt.getTime()) ? undefined : dt;
+}
+
+function formatDateDisp(raw: string): string {
+  if (!raw.trim()) return "";
+  const dt = isoToLocalDate(raw);
+  if (!dt) return raw;
+  return dt.toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function calendarOnlyToIso(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function deriveClient(form: FormData): string {
+  const fn = form.firstName.trim();
+  const ln = form.lastName.trim();
+  if (!fn && !ln) return "";
+  const honor = form.honorific.trim().replace(/\s+$/, "") || "MR.";
+  return [honor, fn, ln].filter(Boolean).join(" ");
+}
+
+function deriveDestination(form: FormData): string {
+  const route = form.outbound.route.trim();
+  const seps = ["→", "\u2192", "->", "–", "—"];
+  for (const sep of seps) {
+    const i = route.indexOf(sep);
+    if (i !== -1) {
+      const after = route.slice(i + sep.length).trim();
+      if (after) return after.replace(/\([^)]*\)/g, "").trim() || after;
+    }
+  }
+  return form.hotelName.trim();
+}
+
+function deriveTravelWindow(form: FormData): {
+  travelStart: string;
+  travelEnd: string;
+} {
+  const startRaw = form.outbound.depDate.trim();
+  const endRaw =
+    form.returnFlight.arrDate.trim() ||
+    form.returnFlight.depDate.trim();
+  const startFmt = formatDateDisp(startRaw) || startRaw;
+  const endFmt = formatDateDisp(endRaw) || endRaw;
+  return {
+    travelStart: startFmt,
+    travelEnd: endFmt || startFmt,
+  };
+}
+
+function deriveListSlice(form: FormData): Pick<
+  Itinerary,
+  "client" | "destination" | "travelStart" | "travelEnd"
+> {
+  const tw = deriveTravelWindow(form);
+  return {
+    client: deriveClient(form),
+    destination: deriveDestination(form),
+    travelStart: tw.travelStart,
+    travelEnd: tw.travelEnd,
+  };
+}
+
+function loadStoredItineraries(): Itinerary[] {
+  try {
+    const raw = localStorage.getItem(ITIN_STORAGE_KEY);
+    if (!raw) return [];
+    const data = JSON.parse(raw) as unknown;
+    if (!Array.isArray(data)) return [];
+    return data.filter(
+      (row): row is Itinerary =>
+        row &&
+        typeof row === "object" &&
+        typeof (row as Itinerary).id === "string" &&
+        (row as Itinerary).form != null &&
+        typeof (row as Itinerary).form === "object",
+    );
+  } catch {
+    return [];
+  }
+}
+
 // ─── Default blanks (new itineraries) ────────────────────────────────────────
 
 const blankFlight: Flight = {
@@ -177,8 +294,6 @@ const blankForm: FormData = {
   internalNotes: "",
 };
 
-const initialItineraries: Itinerary[] = [];
-
 // ─── Shared UI helpers ────────────────────────────────────────────────────────
 
 const inp =
@@ -200,6 +315,68 @@ function Field({
       </label>
       {children}
     </div>
+  );
+}
+
+function DatePopoverField({
+  value,
+  onChange,
+  placeholder = "Pick a date",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const parsed = isoToLocalDate(value);
+  const hasValue = Boolean(value.trim());
+  const shown = hasValue ? formatDateDisp(value) : placeholder;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          className={`${inp} h-auto min-h-[2.375rem] justify-between font-normal text-left`}
+        >
+          <span className={hasValue ? "" : "text-muted-foreground/65"}>
+            {shown}
+          </span>
+          <CalendarIcon
+            size={15}
+            className="opacity-65 shrink-0"
+          />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={parsed}
+          onSelect={(d) => {
+            if (d) {
+              onChange(calendarOnlyToIso(d));
+              setOpen(false);
+            }
+          }}
+          initialFocus
+        />
+        {hasValue && (
+          <div className="border-t border-border px-2 py-1.5">
+            <button
+              type="button"
+              className="w-full rounded-md py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+            >
+              Clear date
+            </button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -374,7 +551,10 @@ function PdfFlightBlock({
           <PdfRow
             label="Dep. Date / Time"
             value={
-              [f.depDate, f.depTime]
+              [
+                formatDateDisp(f.depDate),
+                f.depTime,
+              ]
                 .filter(Boolean)
                 .join("  ") || "—"
             }
@@ -390,7 +570,10 @@ function PdfFlightBlock({
           <PdfRow
             label="Arr. Date / Time"
             value={
-              [f.arrDate, f.arrTime]
+              [
+                formatDateDisp(f.arrDate),
+                f.arrTime,
+              ]
                 .filter(Boolean)
                 .join("  ") || "—"
             }
@@ -558,11 +741,16 @@ function PDFPreview({ form }: { form: FormData }) {
                     />
                     <PdfRow
                       label="Check-in"
-                      value={form.checkIn || "—"}
+                      value={
+                        formatDateDisp(form.checkIn) || "—"
+                      }
                     />
                     <PdfRow
                       label="Check-out"
-                      value={form.checkOut || "—"}
+                      value={
+                        formatDateDisp(form.checkOut) ||
+                        "—"
+                      }
                     />
                     <PdfRow
                       label="Room"
@@ -860,7 +1048,9 @@ function PDFPreview({ form }: { form: FormData }) {
                     />
                     <PdfRow
                       label="Date of birth"
-                      value={form.birthdate || "—"}
+                      value={
+                        formatDateDisp(form.birthdate) || "—"
+                      }
                     />
                     <PdfRow
                       label="Nationality"
@@ -872,7 +1062,10 @@ function PDFPreview({ form }: { form: FormData }) {
                     />
                     <PdfRow
                       label="Passport expiry"
-                      value={form.passportExpiry || "—"}
+                      value={
+                        formatDateDisp(form.passportExpiry) ||
+                        "—"
+                      }
                     />
                     <PdfRow
                       label="Issuing country"
@@ -880,7 +1073,9 @@ function PDFPreview({ form }: { form: FormData }) {
                     />
                     <PdfRow
                       label="Date issued"
-                      value={form.dateIssued || "—"}
+                      value={
+                        formatDateDisp(form.dateIssued) || "—"
+                      }
                     />
                   </tbody>
                 </table>
@@ -1177,7 +1372,6 @@ function FlightFields({
   f: Flight;
   onChange: (field: keyof Flight, val: string) => void;
 }) {
-  const ta = `${inp} resize-none`;
   return (
     <div className="grid grid-cols-2 gap-3">
       <Field label="Route" className="col-span-2">
@@ -1225,11 +1419,10 @@ function FlightFields({
         />
       </Field>
       <Field label="Dep. date">
-        <input
-          className={inp}
+        <DatePopoverField
           value={f.depDate}
-          onChange={(e) => onChange("depDate", e.target.value)}
-          placeholder="25 Oct 2026"
+          onChange={(v) => onChange("depDate", v)}
+          placeholder="Departure date"
         />
       </Field>
       <Field label="Dep. time">
@@ -1261,11 +1454,10 @@ function FlightFields({
         />
       </Field>
       <Field label="Arr. date">
-        <input
-          className={inp}
+        <DatePopoverField
           value={f.arrDate}
-          onChange={(e) => onChange("arrDate", e.target.value)}
-          placeholder="26 Oct 2026"
+          onChange={(v) => onChange("arrDate", v)}
+          placeholder="Arrival date"
         />
       </Field>
       <Field label="Arr. time">
@@ -1378,14 +1570,31 @@ function EditorView({
       ),
     );
 
-  const handleSave = () => {
+  const itineraryRef = useRef(itinerary);
+  itineraryRef.current = itinerary;
+
+  const persist = useCallback(() => {
+    const lu = new Date().toLocaleString(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
     onSave({
-      ...itinerary,
+      ...itineraryRef.current,
       title,
       status,
       form,
-      lastUpdated: "Just now",
+      ...deriveListSlice(form),
+      lastUpdated: lu,
     });
+  }, [title, status, form, onSave]);
+
+  useEffect(() => {
+    const t = window.setTimeout(persist, 450);
+    return () => window.clearTimeout(t);
+  }, [persist]);
+
+  const handleSave = () => {
+    persist();
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -1648,23 +1857,19 @@ function EditorView({
                 </Field>
                 <div />
                 <Field label="Check-in date">
-                  <input
-                    className={inp}
+                  <DatePopoverField
                     value={form.checkIn}
-                    onChange={(e) =>
-                      setF("checkIn", e.target.value)
-                    }
-                    placeholder="26 Oct 2026"
+                    onChange={(v) => setF("checkIn", v)}
+                    placeholder="Check-in date"
                   />
                 </Field>
                 <Field label="Check-out date">
-                  <input
-                    className={inp}
+                  <DatePopoverField
                     value={form.checkOut}
-                    onChange={(e) =>
-                      setF("checkOut", e.target.value)
+                    onChange={(v) =>
+                      setF("checkOut", v)
                     }
-                    placeholder="01 Nov 2026"
+                    placeholder="Check-out date"
                   />
                 </Field>
                 <Field
@@ -1939,13 +2144,12 @@ function EditorView({
                   </select>
                 </Field>
                 <Field label="Date of birth">
-                  <input
-                    className={inp}
+                  <DatePopoverField
                     value={form.birthdate}
-                    onChange={(e) =>
-                      setF("birthdate", e.target.value)
+                    onChange={(v) =>
+                      setF("birthdate", v)
                     }
-                    placeholder="14 Mar 1987"
+                    placeholder="Date of birth"
                   />
                 </Field>
                 <Field label="Nationality">
@@ -1968,13 +2172,12 @@ function EditorView({
                   />
                 </Field>
                 <Field label="Passport expiry">
-                  <input
-                    className={inp}
+                  <DatePopoverField
                     value={form.passportExpiry}
-                    onChange={(e) =>
-                      setF("passportExpiry", e.target.value)
+                    onChange={(v) =>
+                      setF("passportExpiry", v)
                     }
-                    placeholder="30 Jun 2031"
+                    placeholder="Passport expiry"
                   />
                 </Field>
                 <Field label="Issuing country">
@@ -1987,13 +2190,12 @@ function EditorView({
                   />
                 </Field>
                 <Field label="Date issued">
-                  <input
-                    className={inp}
+                  <DatePopoverField
                     value={form.dateIssued}
-                    onChange={(e) =>
-                      setF("dateIssued", e.target.value)
+                    onChange={(v) =>
+                      setF("dateIssued", v)
                     }
-                    placeholder="01 Jul 2021"
+                    placeholder="Passport issued on"
                   />
                 </Field>
               </div>
@@ -2275,9 +2477,11 @@ function ListView({
     const matchFilter =
       filter === "all" || it.status === filter;
     const q = search.toLowerCase();
+    const passengerLc = deriveClient(it.form).toLowerCase();
     const matchSearch =
       !q ||
       it.client.toLowerCase().includes(q) ||
+      passengerLc.includes(q) ||
       it.destination.toLowerCase().includes(q) ||
       it.title.toLowerCase().includes(q) ||
       it.travelStart.toLowerCase().includes(q);
@@ -2321,7 +2525,7 @@ function ListView({
               Itineraries
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Drafts are private to this device
+              Stored in your browser — drafts survive refresh on this device
             </p>
           </div>
           <button
@@ -2537,7 +2741,7 @@ function ListView({
 
 export default function App() {
   const [itineraries, setItineraries] = useState<Itinerary[]>(
-    initialItineraries,
+    loadStoredItineraries,
   );
   const [editingId, setEditingId] = useState<string | null>(
     null,
@@ -2587,9 +2791,21 @@ export default function App() {
     );
   };
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        ITIN_STORAGE_KEY,
+        JSON.stringify(itineraries),
+      );
+    } catch {
+      // quota / private mode
+    }
+  }, [itineraries]);
+
   if (current) {
     return (
       <EditorView
+        key={current.id}
         itinerary={current}
         onBack={() => setEditingId(null)}
         onSave={handleSave}
