@@ -29,6 +29,7 @@ import {
   X,
   Eye,
   EyeOff,
+  Landmark,
 } from "lucide-react";
 
 import { deriveMoneyTotals } from "../lib/itineraryMoney";
@@ -48,6 +49,8 @@ import {
   PDF_PAGE_H,
   PDF_PAGE_W,
 } from "./itineraryPdfPages";
+
+import AccountingView from "./AccountingView";
 
 const ITIN_STORAGE_KEY = "lyzius.itineraries.v1";
 
@@ -997,7 +1000,7 @@ function EditorView({
   const ta = `${inp} resize-none`;
 
   return (
-    <div className="h-screen flex flex-col bg-background overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col bg-background overflow-hidden">
       {/* Top bar */}
       <header className="bg-card border-b border-border flex items-center gap-3 px-4 h-[52px] shrink-0 z-20 shadow-sm print:hidden">
         <button
@@ -1987,7 +1990,7 @@ function ListView({
   });
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex min-h-full h-full flex-col overflow-y-auto bg-background">
       {/* Header */}
       <header className="bg-card border-b border-border sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-6 py-5 flex items-start justify-between">
@@ -2234,10 +2237,65 @@ function ListView({
     </div>
   );
 }
+type WorkspaceTab = "itineraries" | "accounting";
 
-// ─── App root ─────────────────────────────────────────────────────────────────
+function WorkspaceBar({
+  workspace,
+  setWorkspace,
+}: {
+  workspace: WorkspaceTab;
+  setWorkspace: (w: WorkspaceTab) => void;
+}) {
+  const seg =
+    "inline-flex rounded-xl border border-border/80 bg-muted/50 p-1 gap-0.5";
+  const activeSeg =
+    "bg-background text-foreground shadow-sm ring-1 ring-black/5";
+  const idleSeg =
+    "text-muted-foreground hover:text-foreground hover:bg-muted/60";
+
+  return (
+    <header className="z-[100] shrink-0 border-b border-border bg-card/95 backdrop-blur-md">
+      <div className="mx-auto flex h-[52px] max-w-[1800px] items-center justify-between gap-4 px-4">
+        <div
+          className="text-sm font-semibold tracking-tight text-foreground truncate max-w-[min(280px,50vw)]"
+          style={{
+            fontFamily: "'Playfair Display', serif",
+          }}
+        >
+          {BRAND_SHELL_NAME}
+        </div>
+        <div className={seg} role="tablist" aria-label="Workspace">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={workspace === "itineraries"}
+            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
+              workspace === "itineraries" ? activeSeg : idleSeg
+            }`}
+            onClick={() => setWorkspace("itineraries")}
+          >
+            <Plane size={13} aria-hidden /> Itineraries
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={workspace === "accounting"}
+            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
+              workspace === "accounting" ? activeSeg : idleSeg
+            }`}
+            onClick={() => setWorkspace("accounting")}
+          >
+            <Landmark size={13} aria-hidden /> Accounting
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+}
 
 export default function App() {
+  const [workspace, setWorkspace] =
+    useState<WorkspaceTab>("itineraries");
   const [itineraries, setItineraries] = useState<Itinerary[]>(
     loadStoredItineraries,
   );
@@ -2322,24 +2380,43 @@ export default function App() {
     }
   }, [itineraries]);
 
-  if (current) {
-    return (
+  let workspaceMain: React.ReactNode;
+  if (workspace === "accounting") {
+    workspaceMain = <AccountingView />;
+  } else if (current) {
+    workspaceMain = (
       <EditorView
         key={current.id}
         itinerary={current}
         onBack={() => setEditingId(null)}
         onSave={handleSave}
+        onDuplicate={() => {
+          const newId = handleDuplicate(current.id);
+          if (newId != null) setEditingId(newId);
+        }}
+      />
+    );
+  } else {
+    workspaceMain = (
+      <ListView
+        itineraries={itineraries}
+        onOpen={setEditingId}
+        onNew={handleNew}
+        onDuplicate={handleDuplicate}
+        onDelete={handleDelete}
       />
     );
   }
 
   return (
-    <ListView
-      itineraries={itineraries}
-      onOpen={setEditingId}
-      onNew={handleNew}
-      onDuplicate={handleDuplicate}
-      onDelete={handleDelete}
-    />
+    <div className="flex h-screen flex-col overflow-hidden bg-background">
+      <WorkspaceBar
+        workspace={workspace}
+        setWorkspace={setWorkspace}
+      />
+      <div className="flex min-h-0 flex-1 flex-col">
+        {workspaceMain}
+      </div>
+    </div>
   );
 }
