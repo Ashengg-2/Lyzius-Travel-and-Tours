@@ -17,11 +17,9 @@
         <h1 class="list-title">Itineraries</h1>
         <p class="list-sub">Stored on this server — drafts and ready confirmations persist across sessions</p>
       </div>
-      <form method="post" action="{{ url_for('itineraries.create_itinerary') }}">
-        <button type="submit" class="btn btn--accent">
-          <span data-icon="plus"></span> New itinerary
-        </button>
-      </form>
+      <a href="{{ url_for('itineraries.create_itinerary') }}" class="btn btn--accent">
+        <span data-icon="plus"></span> New itinerary
+      </a>
     </div>
   </header>
 
@@ -53,9 +51,7 @@
         <p class="font-heading" style="font-size:1.125rem;margin:0">No itineraries yet</p>
         <p class="text-muted" style="font-size:0.875rem;margin-top:0.25rem">Create your first booking confirmation to get started</p>
       </div>
-      <form method="post" action="{{ url_for('itineraries.create_itinerary') }}">
-        <button type="submit" class="btn btn--accent"><span data-icon="plus"></span> Create first itinerary</button>
-      </form>
+      <a href="{{ url_for('itineraries.create_itinerary') }}" class="btn btn--accent"><span data-icon="plus"></span> Create first itinerary</a>
       {% endif %}
     </div>
     {% else %}
@@ -115,7 +111,7 @@
   <div class="modal" role="dialog" aria-labelledby="delete-title">
     <h2 id="delete-title" class="font-heading" style="font-size:1.25rem;margin:0 0 0.5rem">Delete itinerary?</h2>
     <p class="text-muted" style="font-size:0.875rem;margin:0 0 1.25rem">This cannot be undone.</p>
-    <form method="post" id="delete-form" class="flex gap-2" style="justify-content:flex-end">
+    <form method="post" id="delete-form" class="flex gap-2" style="justify-content:flex-end" action="#">
       <button type="button" class="btn btn--ghost" id="delete-cancel">Cancel</button>
       <button type="submit" class="btn btn--accent" style="background:var(--destructive)">Delete</button>
     </form>

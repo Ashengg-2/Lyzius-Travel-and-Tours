@@ -14,8 +14,21 @@ from app.utils.itinerary_data import (
 bp = Blueprint("itineraries", __name__, url_prefix="/itineraries")
 
 
-@bp.route("/")
+def _create_itinerary_and_redirect():
+    """Create a blank itinerary and open the editor."""
+    it = Itinerary.create_blank()
+    if not it.form.get("passengers"):
+        it.form = {**it.form, "passengers": [blank_passenger()]}
+    db.session.add(it)
+    db.session.commit()
+    return redirect(url_for("itineraries.edit_itinerary", itinerary_id=it.id))
+
+
+@bp.route("/", methods=["GET", "POST"])
 def list_itineraries():
+    if request.method == "POST":
+        return _create_itinerary_and_redirect()
+
     q = request.args.get("q", "").strip().lower()
     status_filter = request.args.get("status", "all")
     rows = Itinerary.query.order_by(Itinerary.last_updated.desc()).all()
@@ -48,14 +61,9 @@ def list_itineraries():
     )
 
 
-@bp.route("/new", methods=["POST"])
+@bp.route("/new", methods=["GET", "POST"])
 def create_itinerary():
-    it = Itinerary.create_blank()
-    if not it.form.get("passengers"):
-        it.form = {**it.form, "passengers": [blank_passenger()]}
-    db.session.add(it)
-    db.session.commit()
-    return redirect(url_for("itineraries.edit_itinerary", itinerary_id=it.id))
+    return _create_itinerary_and_redirect()
 
 
 @bp.route("/<itinerary_id>")

@@ -37,6 +37,13 @@
     });
   });
 
+  deleteForm?.addEventListener('submit', (e) => {
+    const action = deleteForm.getAttribute('action') || '';
+    if (!action || action === '#' || action.endsWith('/itineraries/')) {
+      e.preventDefault();
+    }
+  });
+
   deleteCancel?.addEventListener('click', () => {
     if (modal) modal.hidden = true;
   });
