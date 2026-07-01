@@ -25,13 +25,15 @@ First-time API setup: start **Postgres** (easiest: **`docker compose up -d`** fr
 **Only frontend:** `npm run dev:web`  
 **Only API:** `npm run dev:server` (same as `npm run dev:api`)
 
-**Production build:** `npm install && npm install --prefix server && npm run build` then **`NODE_ENV=production npm start`** (see **[DEPLOY.md](./DEPLOY.md)**).
+**Production (Flask):** `pip install -r requirements.txt` then `gunicorn --bind 0.0.0.0:$PORT run:app` — see **[DEPLOY.md](./DEPLOY.md)** (Render / Railway).
+
+**Legacy Node build:** `npm install && npm install --prefix server && npm run build` then `npm start` (old `server/` API + React SPA).
 
 ---
 
 ## Deployment
 
-Single-service hosting (recommended): **[DEPLOY.md](./DEPLOY.md)** — Render / Railway, **Postgres** + env vars.
+Hosting guide: **[DEPLOY.md](./DEPLOY.md)** — Render / Railway, Gunicorn, `SECRET_KEY`, optional persistent SQLite.
 
 ---
 

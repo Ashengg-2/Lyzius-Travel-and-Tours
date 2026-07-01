@@ -1,117 +1,127 @@
-# Deploy (single service: API + SPA)
+# Deploy (Flask — production)
 
-Your repo builds **two artifacts**, but production can run **one Node process**:
-
-1. **`dist/`** (repo root) — Vite production build (`npm run build` at root includes this).
-2. **`server/dist/`** — compiled Fastify app.
-
-When **`NODE_ENV=production`** and **`dist/index.html`** exists, the server also **serves the SPA** from `/` and `/assets/*`; APIs stay under **`/v1/**`**.
-
-To **disable** that (split hosting), set **`SERVE_FRONTEND=false`**.
+The live app is a **Python Flask** service (`run.py`). Use **Gunicorn** in production — not `python run.py` (dev server only).
 
 ---
 
-## 1. Environment variables (`server`/host dashboard)
+## 1. Environment variables
 
-Copy from **`server/.env.example`** and set on the host:
+| Variable | Example | Required |
+|----------|---------|----------|
+| **`SECRET_KEY`** | 32+ random chars | **Yes** in production |
+| **`PORT`** | `10000` | Render injects this automatically |
+| **`DATABASE_URL`** | `sqlite:////data/lyzius.db` | Optional — see **Database** below |
 
-| Variable | Example | Notes |
-|----------|---------|--------|
-| **`NODE_ENV`** | `production` | Required for serving `dist/` (many hosts set automatically). |
-| **`PORT`** | `3333` or host default | Railway/Render inject `PORT`; listen uses it. |
-| **`DATABASE_URL`** | `postgresql://…` | **Postgres** from Render (linked DB), Neon, or Docker — see **`server/.env.example`**. |
-| **`JWT_SECRET`** | 32+ random chars | Rotate if leaked. |
-| **`FRONTEND_ORIGIN`** | `https://your-app.up.railway.app` | Same public URL as the browser tab if everything is one service; comma‑separate if you add extra origins. |
+**Remove** if migrating from the old Node stack (no longer used):
 
-**Database**
-
-The Prisma schema is **PostgreSQL-only**. On Render, create a **PostgreSQL** instance and **link** it to the Web Service so **`DATABASE_URL`** is injected (or paste the **External Database URL** into env vars, usually with **`?sslmode=require`**).
+- `JWT_SECRET`, `FRONTEND_ORIGIN`, `NODE_ENV`, `SERVE_FRONTEND`
+- Linked **Render Postgres** (unless you add Postgres support to Flask later)
 
 ---
 
-## 2. Install & build (from repo root on the builder)
+## 2. Build & start (any host)
 
-Hosts usually run equivalent of:
+**Build:**
 
 ```bash
-npm install
-npm install --prefix server
-npm run build
+pip install -r requirements.txt
 ```
 
-- **`npm run build`** runs `vite build` then `npm run build --prefix server` (`prisma generate` + `tsc`).
-- **`npm start`** runs `npm run start --prefix server` → `prisma migrate deploy && node server/dist/index.js`.
-
----
-
-## 3. Railway (simple)
-
-1. New **Project** → **Deploy from GitHub** (or upload repo).
-2. **Root directory**: repository root (`Create new component` folder).
-3. **Build command**:  
-
-   ```bash
-   npm install && npm install --prefix server && npm run build
-   ```
-
-4. **Start command**:  
-
-   ```bash
-   npm start
-   ```
-
-5. Add **`JWT_SECRET`** and **`DATABASE_URL`** (Neon Postgres URL recommended).
-6. Set **`NODE_ENV`** to `production` if not defaulted.
-7. **`FRONTEND_ORIGIN`** = your Railway **public HTTPS URL** for this service (same as where you open the app).
-8. Redeploy. Open **`/health`** → `{"ok":true}` ; open **`/`** → SPA.
-
-(Optional) Add a **Volume** only if you later change the stack to use on-disk files — not needed for Postgres.
-
----
-
-## 4. Render (Web Service)
-
-Same idea:
-
-- **Build**: `npm install && npm install --prefix server && npm run build`
-- **Start**: `npm start`
-- **Env vars** same as Railway (above table).
-
-### PostgreSQL — set `DATABASE_URL` (fixes Render P1012)
-
-`npm start` runs **`prisma migrate deploy`**. **`DATABASE_URL`** must exist at runtime (`server/.env` does not ship in Git):
-
-1. **Create** PostgreSQL on Render (or use Neon → paste URI).
-2. **Web Service → Environment → Link database** → pick Postgres → **`DATABASE_URL`** is usually injected.
-3. Otherwise: Postgres dashboard → copy **External** (or Internal) URI → Web Service env → **`DATABASE_URL`** = pasted value (often **`?sslmode=require`**).
-
-Also **`JWT_SECRET`**, **`NODE_ENV`=`production`**, **`FRONTEND_ORIGIN`** = your live site URL (`https://…onrender.com`).
-
----
-
-## 5. Smoke test locally (optional)
-
-From repo root, after **`npm run build`**:
+**Start (production):**
 
 ```bash
-cd server
-set NODE_ENV=production   # Windows PowerShell: $env:NODE_ENV='production'
-npm start
+gunicorn --bind 0.0.0.0:$PORT run:app
 ```
 
-Visit `http://127.0.0.1:3333/` (adjust `PORT` / `.env`). You should see the app and **`GET /health`**.
+On Windows locally for a quick prod smoke test:
+
+```powershell
+$env:SECRET_KEY = "change-me"
+gunicorn --bind 127.0.0.1:5000 run:app
+```
+
+**Local development** (auto-reload, debug):
+
+```bash
+python run.py
+```
 
 ---
 
-## 6. What’s left for “real” use
+## 3. Render (Web Service)
 
-The React app still loads data **from in-memory state** unless you wired **`fetch`** to **`/v1/itineraries`**. For deployment, finish that + store the JWT once you expose auth in the UI.
+1. **Dashboard → your Web Service → Settings**
+2. **Runtime**: **Python 3**
+3. **Root directory**: repository root
+4. **Build command**:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+5. **Start command**:
+
+   ```bash
+   gunicorn --bind 0.0.0.0:$PORT run:app
+   ```
+
+6. **Environment** → add **`SECRET_KEY`** (generate a long random string).
+7. **Redeploy**. Open your Render URL → should redirect to **`/itineraries/`**.
+
+### Database on Render
+
+The app defaults to **SQLite** at `instance/lyzius.db`. Render’s default filesystem is **ephemeral** — data is lost on redeploy unless you persist it.
+
+**Option A — Persistent disk (recommended for SQLite)**
+
+1. Web Service → **Disks** → add a disk (e.g. mount path **`/data`**).
+2. Set env var:
+
+   ```
+   DATABASE_URL=sqlite:////data/lyzius.db
+   ```
+
+3. Redeploy.
+
+**Option B — Accept ephemeral storage**
+
+Fine for demos; itineraries/accounting reset when the service restarts or redeploys.
+
+You do **not** need a Render **PostgreSQL** instance for the current Flask app. You can delete/suspend the old Postgres service if it was only for the Node API.
+
+### Migrating from the old Node deploy
+
+| Setting | Old | New |
+|---------|-----|-----|
+| Runtime | Node | **Python 3** |
+| Build | `npm install && … && npm run build` | `pip install -r requirements.txt` |
+| Start | `npm start` | `gunicorn --bind 0.0.0.0:$PORT run:app` |
+
+---
+
+## 4. Railway / other PaaS
+
+Same build/start as above. Set **`SECRET_KEY`**. Use a volume + **`DATABASE_URL=sqlite:////path/on/volume/lyzius.db`** if you need persistence.
+
+---
+
+## 5. Smoke test after deploy
+
+- **`/`** → redirects to **`/itineraries/`**
+- **`/accounting/`** → accounting workspace
+- Create an itinerary → refresh → data should still be there (if persistent disk / DB is configured)
 
 ---
 
 ## Troubleshooting
 
-- **Build fails with `vite: not found`:** Render/Heroku often use **`NODE_ENV=production`** for installs, which skips **`devDependencies`**. Either move Vite (+ Tailwind) into **`dependencies`** (this repo does that), or change the Render **Build command** to `npm install --include=dev && npm install --prefix server --include=dev && npm run build`.
-- **Blank page / 404 on `/`:** Confirm **`NODE_ENV=production`**, **`npm run build` ran from repo root** (there is a **`dist/index.html`** next to **`server/`**), **`SERVE_FRONTEND` ≠ `false`**.
-- **CORS errors:** **`FRONTEND_ORIGIN`** must match the browser origin (scheme + host + port).
-- **Prisma migrations fail:** `DATABASE_URL` wrong or Postgres schema not migrated; see **`server/docs/using-postgresql.md`**.
+- **Module not found / wrong app:** Start command must be `gunicorn … run:app` (repo root, `run.py` present).
+- **Data disappears after deploy:** Add a persistent disk and set **`DATABASE_URL`** to a SQLite path on that disk.
+- **502 / app won’t start:** Check logs; confirm **`pip install -r requirements.txt`** ran and **`SECRET_KEY`** is set.
+- **Old `/health` or `/v1/...` 404:** Those were the Node API; the Flask app does not expose them.
+
+---
+
+## Legacy: Node + Vite + Fastify (`server/`)
+
+The previous stack built **`dist/`** + **`server/dist/`** with `npm run build` / `npm start`, Postgres via Prisma, and env vars `JWT_SECRET`, `DATABASE_URL`, `FRONTEND_ORIGIN`. That code remains in the repo for reference but is **not** the production entry point anymore. See **`server/README.md`** if you need to run the old API locally.

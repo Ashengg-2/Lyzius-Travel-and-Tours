@@ -48,3 +48,27 @@ Set `DATABASE_URL` for another backend if needed.
 ## Legacy React app
 
 The previous Vite/React SPA remains under `src/` for reference. The Flask app is the new primary runtime entry point via `run.py`.
+
+## Production
+
+Use **Gunicorn**, not the Flask dev server:
+
+```bash
+pip install -r requirements.txt
+export SECRET_KEY="your-long-random-secret"   # PowerShell: $env:SECRET_KEY = "…"
+gunicorn --bind 0.0.0.0:5000 run:app
+```
+
+Full hosting steps (Render, persistent SQLite, env vars): **[DEPLOY.md](./DEPLOY.md)**.
+
+## Deploy on Render (summary)
+
+| Setting | Value |
+|---------|--------|
+| Runtime | Python 3 |
+| Build | `pip install -r requirements.txt` |
+| Start | `gunicorn --bind 0.0.0.0:$PORT run:app` |
+| Env | `SECRET_KEY` (required) |
+| Persistence | Optional disk at `/data` + `DATABASE_URL=sqlite:////data/lyzius.db` |
+
+Remove old Node env vars (`JWT_SECRET`, `FRONTEND_ORIGIN`, linked Postgres) unless you still run the legacy API.
