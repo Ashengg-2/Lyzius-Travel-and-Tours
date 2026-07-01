@@ -1,0 +1,164 @@
+{% from 'pdf/macros.html' import pdf_page_shell, pdf_row, pdf_block, brand_header %}
+
+{% for page in pages %}
+{% call pdf_page_shell(export_marker) %}
+  {% set form = page.form %}
+  {% if page.kind == 'booking' %}
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;padding-bottom:14px;border-bottom:1px solid #d6d3d1">
+    {{ brand_header(form) }}
+    <div style="text-align:right">
+      <div style="font-size:11px;font-weight:600;color:#1c1917;letter-spacing:0.06em;text-transform:uppercase">{{ form.page1Heading or 'Flight Details' }}</div>
+      <div style="margin-top:6px;font-size:9px;color:#78716c;font-family:ui-monospace,monospace">Page {{ page.page_index + 1 }} of {{ page.page_total }}</div>
+    </div>
+  </div>
+  {% for flight_title, flight_key in [('Outbound Flight', 'outbound'), ('Return Flight', 'returnFlight')] %}
+  {% set f = form[flight_key] %}
+  {% call pdf_block(flight_title) %}
+  <table style="width:100%;border-collapse:collapse"><tbody>
+    {{ pdf_row('Route', f.route) }}
+    {{ pdf_row('Airline / Flight No.', (f.airline ~ ' · ' ~ f.flightNo) if f.airline or f.flightNo else '') }}
+    {{ pdf_row('Departure', (f.depAirport ~ ', ' ~ f.depTerminal) if f.depTerminal else f.depAirport) }}
+    {{ pdf_row('Dep. Date / Time', (page.format_date(f.depDate) ~ '  ' ~ f.depTime) if f.depDate or f.depTime else '') }}
+    {{ pdf_row('Arrival', (f.arrAirport ~ ', ' ~ f.arrTerminal) if f.arrTerminal else f.arrAirport) }}
+    {{ pdf_row('Arr. Date / Time', (page.format_date(f.arrDate) ~ '  ' ~ f.arrTime) if f.arrDate or f.arrTime else '') }}
+    {{ pdf_row('Duration', f.duration) }}
+    {{ pdf_row('Baggage', f.baggage) }}
+  </tbody></table>
+  {% endcall %}
+  {% endfor %}
+  {% call pdf_block('Hotel') %}
+  <table style="width:100%;border-collapse:collapse"><tbody>
+    {{ pdf_row('Hotel', form.hotelName) }}
+    {{ pdf_row('Address', form.hotelAddress | replace('\n', ', ')) }}
+    {{ pdf_row('Phone', form.hotelPhone) }}
+    {{ pdf_row('Check-in', page.format_date(form.checkIn)) }}
+    {{ pdf_row('Check-out', page.format_date(form.checkOut)) }}
+    {{ pdf_row('Room', form.roomDesc) }}
+    {{ pdf_row('Inclusions', form.inclusions) }}
+  </tbody></table>
+  {% endcall %}
+  {% if form.supplements %}
+  {% call pdf_block('Supplements & Fees') %}
+  <table style="width:100%;border-collapse:collapse">
+    <thead><tr style="background:#f5f5f4">
+      {% for h in (['Description', 'Charge Type'] if page.hide_pricing else ['Description', 'Amount', 'Charge Type']) %}
+      <th style="padding:5px 10px;text-align:left;font-size:7.5px;color:#78716c;font-weight:600;letter-spacing:0.1em;text-transform:uppercase">{{ h }}</th>
+      {% endfor %}
+    </tr></thead>
+    <tbody>
+      {% for s in form.supplements %}
+      <tr>
+        <td style="padding:5px 10px;border-top:1px solid #e7e5e4">{{ s.desc }}</td>
+        {% if not page.hide_pricing %}<td style="padding:5px 10px;border-top:1px solid #e7e5e4;font-family:ui-monospace,monospace">{{ s.amount }}</td>{% endif %}
+        <td style="padding:5px 10px;border-top:1px solid #e7e5e4;color:#57534e">{{ s.chargeType }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endcall %}
+  {% endif %}
+  {% if form.cancellationRows %}
+  {% call pdf_block('Cancellation Policy') %}
+  <table style="width:100%;border-collapse:collapse"><thead><tr style="background:#f5f5f4">
+    <th style="padding:5px 10px;font-size:7.5px;color:#78716c">Period / Condition</th>
+    <th style="padding:5px 10px;font-size:7.5px;color:#78716c">Charge</th>
+  </tr></thead><tbody>
+    {% for c in form.cancellationRows %}
+    <tr>
+      <td style="padding:5px 10px;border-top:1px solid #e7e5e4">{{ c.rule }}</td>
+      <td style="padding:5px 10px;border-top:1px solid #e7e5e4;font-family:ui-monospace,monospace">{{ '—' if page.hide_pricing else c.charge }}</td>
+    </tr>
+    {% endfor %}
+  </tbody></table>
+  {% endcall %}
+  {% endif %}
+  {% if form.ratesConditions %}
+  <div style="margin-bottom:14px">
+    <div style="font-size:7.5px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#78716c;margin-bottom:6px">Rates &amp; Conditions</div>
+    <p style="font-size:8.5px;color:#57534e;line-height:1.75;max-width:95%;margin:0">{{ form.ratesConditions }}</p>
+  </div>
+  {% endif %}
+
+  {% elif page.kind == 'passengers' %}
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid #d6d3d1">
+    {{ brand_header(form) }}
+    <div style="text-align:right">
+      <div style="font-size:11px;font-weight:600;color:#1c1917;letter-spacing:0.06em;text-transform:uppercase">Passengers</div>
+      <div style="margin-top:6px;font-size:9px;color:#78716c;font-family:ui-monospace,monospace">Page {{ page.page_index + 1 }} of {{ page.page_total }}</div>
+    </div>
+  </div>
+  {% for pas in page.chunk %}
+  {% set title = ('Traveler ' ~ (page.chunk_offset + loop.index)) if page.passenger_count > 1 else 'Passenger Information' %}
+  {% call pdf_block(title, true) %}
+  <table style="width:100%;border-collapse:collapse"><tbody>
+    {{ pdf_row('Full name', page.passenger_line(pas), true) }}
+    {{ pdf_row('Passenger type', pas.passengerType, true) }}
+    {{ pdf_row('Date of birth', page.format_date(pas.birthdate), true) }}
+    {{ pdf_row('Nationality', pas.nationality, true) }}
+    {{ pdf_row('Passport no.', pas.passportNo, true) }}
+    {{ pdf_row('Passport expiry', page.format_date(pas.passportExpiry), true) }}
+    {{ pdf_row('Issuing country', pas.issuingCountry, true) }}
+    {{ pdf_row('Date issued', page.format_date(pas.dateIssued), true) }}
+  </tbody></table>
+  {% endcall %}
+  {% endfor %}
+
+  {% elif page.kind == 'final' %}
+  {% set money = page.money %}
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;padding-bottom:14px;border-bottom:1px solid #d6d3d1">
+    {{ brand_header(form) }}
+    <div style="text-align:right;font-size:8.5px;color:#57534e;line-height:1.8">
+      <div style="font-weight:600;color:#1c1917;margin-bottom:1px">{{ form.contactName or '—' }}</div>
+      <div>{{ form.contactPhone or '—' }}</div>
+      <div>{{ form.contactEmail or '—' }}</div>
+      <div style="margin-top:8px;font-size:9px;color:#78716c;font-family:ui-monospace,monospace">Page {{ page.page_index + 1 }} of {{ page.page_total }}</div>
+    </div>
+  </div>
+  {% if page.hide_pricing %}
+  {% call pdf_block('Fare & rates') %}
+  <p style="margin:0;padding:10px 12px;font-size:9px;color:#57534e;line-height:1.75">Itemized pricing has been omitted on this itinerary PDF. Contact <strong>{{ form.contactEmail or form.contactPhone or form.contactName or 'your travel consultant' }}</strong> for a full quotation.</p>
+  {% endcall %}
+  {% else %}
+  <div style="display:flex;gap:12px;margin-bottom:14px">
+    <div style="flex:1">{% call pdf_block('Adult Fare') %}
+    <table style="width:100%;border-collapse:collapse"><tbody>
+      {{ pdf_row('Base fare (1 adult)', 'PHP ' ~ money.adult_base_fare_fmt) }}
+      {{ pdf_row('Other charges', 'PHP ' ~ money.adult_other_charges_fmt) }}
+      <tr><td style="padding:6px 10px;color:#57534e;font-size:8.5px;border-top:1px solid #d6d3d1;font-weight:600">Total adult fare</td>
+      <td style="padding:6px 10px;font-family:ui-monospace,monospace;font-weight:700;border-top:1px solid #d6d3d1">PHP {{ money.adult_total_fare_fmt }}</td></tr>
+    </tbody></table>{% endcall %}</div>
+    <div style="flex:1">{% call pdf_block('Room Rate') %}
+    <table style="width:100%;border-collapse:collapse"><tbody>
+      {{ pdf_row('Room rate', 'PHP ' ~ money.room_rate_fmt) }}
+      {{ pdf_row('Taxes & fees', 'PHP ' ~ money.room_taxes_fmt) }}
+      <tr><td style="padding:6px 10px;color:#57534e;font-size:8.5px;border-top:1px solid #d6d3d1;font-weight:600">Total room rate</td>
+      <td style="padding:6px 10px;font-family:ui-monospace,monospace;font-weight:700;border-top:1px solid #d6d3d1">PHP {{ money.total_room_rate_fmt }}</td></tr>
+    </tbody></table>{% endcall %}</div>
+  </div>
+  {% call pdf_block('Summary') %}
+  <table style="width:100%;border-collapse:collapse"><tbody>
+    <tr><td style="padding:6px 10px;color:#57534e;font-size:9px;border-bottom:1px solid #e7e5e4">Original total</td>
+    <td style="padding:6px 10px;color:#57534e;font-family:ui-monospace,monospace;text-align:right;text-decoration:line-through;border-bottom:1px solid #e7e5e4">PHP {{ money.original_total_fmt }}</td></tr>
+    <tr><td style="padding:6px 10px;color:#b91c1c;font-size:9px;border-bottom:1px solid #e7e5e4">Bundle savings</td>
+    <td style="padding:6px 10px;color:#b91c1c;font-family:ui-monospace,monospace;text-align:right;font-weight:600;border-bottom:1px solid #e7e5e4">− PHP {{ money.savings_fmt }}</td></tr>
+    <tr><td style="padding:10px;color:#1c1917;font-size:12px;font-weight:700">Total due</td>
+    <td style="padding:10px;color:#1c1917;font-family:ui-monospace,monospace;font-size:15px;font-weight:700;text-align:right">PHP {{ money.total_due_fmt }}</td></tr>
+  </tbody></table>
+  {% endcall %}
+  {% endif %}
+  <div style="position:absolute;bottom:34px;left:40px;right:40px">
+    {% if form.agencyFooter %}<p style="font-size:7.5px;color:#78716c;line-height:1.9;margin-bottom:14px;border-top:1px solid #e7e5e4;padding-top:12px">{{ form.agencyFooter }}</p>{% endif %}
+    <div style="display:flex;justify-content:space-between;align-items:flex-end">
+      <div style="font-size:7.5px;color:#78716c">
+        <p style="margin-bottom:18px">I hereby certify that the information above is correct and accurate.</p>
+        <div style="border-top:1px solid #d6d3d1;padding-top:4px;width:210px">Signature over printed name</div>
+      </div>
+      <div style="font-size:7.5px;color:#78716c">
+        <div style="margin-bottom:18px;opacity:0">_</div>
+        <div style="border-top:1px solid #d6d3d1;padding-top:4px;width:140px">Date</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+{% endcall %}
+{% endfor %}

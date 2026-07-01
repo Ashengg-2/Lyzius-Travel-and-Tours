@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+{% from 'components/macros.html' import status_pill %}
+
+{% block title %}Itineraries — {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="scroll-y" style="height:100%">
+  <header class="list-header">
+    <div class="list-header__inner">
+      <div>
+        <div class="list-brand">
+          <img src="{{ url_for('static', filename='images/lyzius-logo.svg') }}" alt="" class="list-logo" width="200" height="56" loading="eager">
+          <div class="list-brand__text">
+            <p class="font-heading" style="font-size:1.35rem;margin:0">{{ brand_name }}</p>
+          </div>
+        </div>
+        <h1 class="list-title">Itineraries</h1>
+        <p class="list-sub">Stored on this server — drafts and ready confirmations persist across sessions</p>
+      </div>
+      <form method="post" action="{{ url_for('itineraries.create_itinerary') }}">
+        <button type="submit" class="btn btn--accent">
+          <span data-icon="plus"></span> New itinerary
+        </button>
+      </form>
+    </div>
+  </header>
+
+  <div class="container" style="padding-block:1.25rem">
+    <form class="filters" method="get" action="{{ url_for('itineraries.list_itineraries') }}" id="list-filters">
+      <div class="search-wrap">
+        <span data-icon="search"></span>
+        <input class="input" type="search" name="q" value="{{ search }}" placeholder="Search client name, destination, dates…" id="search-input">
+      </div>
+      <div class="filter-pills">
+        {% for f in ['all', 'draft', 'ready'] %}
+        <button type="submit" name="status" value="{{ f }}"
+                class="filter-pill{% if status_filter == f %} is-active{% endif %}">{{ f }}</button>
+        {% endfor %}
+      </div>
+    </form>
+
+    {% if not itineraries %}
+    <div class="empty-state">
+      {% if search %}
+      <div class="empty-state__icon"><span data-icon="search"></span></div>
+      <div>
+        <p style="font-weight:600;margin:0">No results for &ldquo;{{ search }}&rdquo;</p>
+        <p class="text-muted" style="font-size:0.875rem;margin-top:0.25rem">Try a different client name, destination, or date</p>
+      </div>
+      {% else %}
+      <div class="empty-state__icon"><span data-icon="file"></span></div>
+      <div>
+        <p class="font-heading" style="font-size:1.125rem;margin:0">No itineraries yet</p>
+        <p class="text-muted" style="font-size:0.875rem;margin-top:0.25rem">Create your first booking confirmation to get started</p>
+      </div>
+      <form method="post" action="{{ url_for('itineraries.create_itinerary') }}">
+        <button type="submit" class="btn btn--accent"><span data-icon="plus"></span> Create first itinerary</button>
+      </form>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="card" style="overflow:visible">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Client</th>
+            <th>Destination</th>
+            <th>Travel start</th>
+            <th>Travel end</th>
+            <th>Status</th>
+            <th>Last updated</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for it in itineraries %}
+          <tr data-href="{{ url_for('itineraries.edit_itinerary', itinerary_id=it.id) }}">
+            <td>
+              <div style="font-weight:600">{{ it.client or '—' }}</div>
+              <div class="text-muted text-mono" style="font-size:0.6875rem;margin-top:0.125rem">{{ it.title }}</div>
+            </td>
+            <td>{{ it.destination or '—' }}</td>
+            <td class="text-mono">{{ it.travel_start or '—' }}</td>
+            <td class="text-mono">{{ it.travel_end or '—' }}</td>
+            <td>{{ status_pill(it.status) }}</td>
+            <td class="text-muted text-mono" style="font-size:0.75rem">{{ it.last_updated }}</td>
+            <td data-overflow-root="{{ it.id }}" onclick="event.stopPropagation()">
+              <div class="flex items-center gap-2">
+                <a href="{{ url_for('itineraries.edit_itinerary', itinerary_id=it.id) }}" class="btn btn--accent btn--sm">Open</a>
+                <div class="dropdown">
+                  <button type="button" class="btn--icon" aria-label="More actions" data-menu-toggle="{{ it.id }}">
+                    <span data-icon="more"></span>
+                  </button>
+                  <div class="dropdown__menu" hidden data-menu="{{ it.id }}">
+                    <form method="post" action="{{ url_for('itineraries.duplicate_itinerary', itinerary_id=it.id) }}">
+                      <button type="submit" class="dropdown__item"><span data-icon="copy"></span> Duplicate</button>
+                    </form>
+                    <button type="button" class="dropdown__item dropdown__item--danger" data-delete="{{ it.id }}">
+                      <span data-icon="trash"></span> Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="modal-backdrop" hidden id="delete-modal">
+  <div class="modal" role="dialog" aria-labelledby="delete-title">
+    <h2 id="delete-title" class="font-heading" style="font-size:1.25rem;margin:0 0 0.5rem">Delete itinerary?</h2>
+    <p class="text-muted" style="font-size:0.875rem;margin:0 0 1.25rem">This cannot be undone.</p>
+    <form method="post" id="delete-form" class="flex gap-2" style="justify-content:flex-end">
+      <button type="button" class="btn btn--ghost" id="delete-cancel">Cancel</button>
+      <button type="submit" class="btn btn--accent" style="background:var(--destructive)">Delete</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/itinerary-list.js') }}" defer></script>
+{% endblock %}

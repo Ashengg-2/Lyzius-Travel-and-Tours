@@ -1,0 +1,59 @@
+<div class="passenger-card card" style="padding:1rem;margin-bottom:1rem;background:rgba(221,216,206,0.2)" data-passenger-id="{{ p.id }}">
+  <div class="flex items-center" style="justify-content:space-between;margin-bottom:0.75rem">
+    <p class="field__label" style="margin:0">Traveler{% if form.passengers|length > 1 %} {{ loop.index }}{% endif %}</p>
+    {% if form.passengers|length > 1 %}
+    <button type="button" class="btn--icon" data-remove-passenger aria-label="Remove traveler"><span data-icon="x"></span></button>
+    {% endif %}
+  </div>
+  <div class="grid-2">
+    <div class="field" style="grid-column:span 2;display:grid;grid-template-columns:76px 1fr 1fr;gap:0.5rem">
+      <div>
+        <label class="field__label">Title</label>
+        <select class="select" data-passenger-field="honorific">
+          {% for h in ['MR.', 'MS.', 'MRS.', 'DR.', 'PROF.'] %}
+          <option{% if p.honorific == h %} selected{% endif %}>{{ h }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="field__label">First name</label>
+        <input class="input" data-passenger-field="firstName" value="{{ p.firstName | default('') }}">
+      </div>
+      <div>
+        <label class="field__label">Last name</label>
+        <input class="input" data-passenger-field="lastName" value="{{ p.lastName | default('') }}">
+      </div>
+    </div>
+    <div class="field">
+      <label class="field__label">Passenger type</label>
+      <select class="select" data-passenger-field="passengerType">
+        <option{% if p.passengerType == 'Adult' %} selected{% endif %}>Adult</option>
+        <option{% if p.passengerType == 'Child' %} selected{% endif %}>Child</option>
+      </select>
+    </div>
+    <div class="field">
+      <label class="field__label">Date of birth</label>
+      <input class="input input--mono" type="date" data-passenger-field="birthdate" value="{{ p.birthdate | default('') }}">
+    </div>
+    <div class="field">
+      <label class="field__label">Nationality</label>
+      <input class="input" data-passenger-field="nationality" value="{{ p.nationality | default('') }}">
+    </div>
+    <div class="field">
+      <label class="field__label">Passport no.</label>
+      <input class="input" data-passenger-field="passportNo" value="{{ p.passportNo | default('') }}">
+    </div>
+    <div class="field">
+      <label class="field__label">Passport expiry</label>
+      <input class="input input--mono" type="date" data-passenger-field="passportExpiry" value="{{ p.passportExpiry | default('') }}">
+    </div>
+    <div class="field">
+      <label class="field__label">Issuing country</label>
+      <input class="input" data-passenger-field="issuingCountry" value="{{ p.issuingCountry | default('') }}">
+    </div>
+    <div class="field">
+      <label class="field__label">Date issued</label>
+      <input class="input input--mono" type="date" data-passenger-field="dateIssued" value="{{ p.dateIssued | default('') }}">
+    </div>
+  </div>
+</div>

@@ -1,0 +1,19 @@
+<header class="workspace-bar">
+  <div class="workspace-bar__inner">
+    <div class="workspace-bar__brand">{{ brand_name | default('Lyzius Travel & Tours') }}</div>
+    <div class="workspace-tabs" role="tablist" aria-label="Workspace">
+      <a href="{{ url_for('itineraries.list_itineraries') }}"
+         class="workspace-tab{% if workspace == 'itineraries' %} is-active{% endif %}"
+         role="tab"
+         aria-selected="{{ 'true' if workspace == 'itineraries' else 'false' }}">
+        <span data-icon="plane"></span> Itineraries
+      </a>
+      <a href="{{ url_for('accounting.accounting_home') }}"
+         class="workspace-tab{% if workspace == 'accounting' %} is-active{% endif %}"
+         role="tab"
+         aria-selected="{{ 'true' if workspace == 'accounting' else 'false' }}">
+        <span data-icon="landmark"></span> Accounting
+      </a>
+    </div>
+  </div>
+</header>

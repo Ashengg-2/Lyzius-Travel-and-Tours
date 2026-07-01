@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+
+{% block title %}Accounting — {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="scroll-y" style="height:100%" id="accounting-root"
+     data-save-url="{{ url_for('api.patch_accounting') }}"
+     data-export-url="{{ url_for('api.accounting_export_html') }}">
+  <main class="container" style="padding-block:2rem 5rem">
+    <div class="flex items-center" style="justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:2rem">
+      <div>
+        <div class="flex items-center gap-2 mb-2">
+          <span data-icon="landmark" class="text-accent"></span>
+          <h1 class="font-heading" style="font-size:1.75rem;margin:0">Accounting</h1>
+        </div>
+        <p class="text-muted" style="font-size:0.875rem;max-width:36rem;margin:0">
+          Client record, amounts you owe <strong>payables</strong>, cash you expect <strong>receivables</strong>. Net income updates as you edit lines.
+        </p>
+      </div>
+      <div class="flex gap-2">
+        <button type="button" class="btn btn--accent btn--sm" id="export-accounting-pdf"><span data-icon="download"></span> Export PDF</button>
+        <button type="button" class="btn btn--ghost btn--sm" id="reload-accounting">Reload from server</button>
+      </div>
+    </div>
+
+    <section class="card mb-6" style="padding:1.5rem">
+      <div class="flex items-center gap-2 mb-4"><span data-icon="user"></span><h2 style="font-size:1rem;margin:0;font-family:var(--font-body);font-weight:600">Client details</h2></div>
+      <div class="grid-2">
+        <div class="field"><label class="field__label">Client / account name</label><input class="input" data-acct="clientName" value="{{ snapshot.clientName }}"></div>
+        <div class="field"><label class="field__label">Company</label><input class="input" data-acct="clientCompany" value="{{ snapshot.clientCompany }}"></div>
+        <div class="field"><label class="field__label">Email</label><input class="input" type="email" data-acct="clientEmail" value="{{ snapshot.clientEmail }}"></div>
+        <div class="field"><label class="field__label">Phone</label><input class="input" data-acct="clientPhone" value="{{ snapshot.clientPhone }}"></div>
+        <div class="field col-span-2"><label class="field__label">Notes</label><textarea class="textarea" rows="3" data-acct="clientNotes">{{ snapshot.clientNotes }}</textarea></div>
+      </div>
+    </section>
+
+    <div class="grid-2 mb-6" style="gap:1.5rem">
+      <div class="ledger-card ledger-card--rose">
+        <div class="flex items-center gap-2 mb-4"><span data-icon="trend-down"></span><h2 style="font-size:1.125rem;margin:0;font-weight:600">Payables</h2></div>
+        <p class="text-muted" style="font-size:0.75rem;margin:0 0 1rem">Money out — suppliers, ticketing, refunds you owe.</p>
+        <div id="payables-list">
+          {% for row in snapshot.payables %}
+          <div class="card flex gap-2 mb-2" style="padding:0.75rem;flex-wrap:wrap" data-ledger-row data-id="{{ row.id }}">
+            <input class="input" style="flex:1;min-width:140px" data-line="description" value="{{ row.description }}" placeholder="Description">
+            <input class="input" style="flex:1;min-width:120px" data-line="counterparty" value="{{ row.counterparty }}" placeholder="Vendor">
+            <input class="input input--mono" style="width:8rem" data-line="amount" value="{{ row.amount }}" placeholder="0.00">
+            <button type="button" class="btn--icon" data-remove-ledger><span data-icon="x"></span></button>
+          </div>
+          {% endfor %}
+        </div>
+        <button type="button" class="btn btn--ghost btn--sm mt-4" data-add-ledger="payables"><span data-icon="plus"></span> Add line</button>
+      </div>
+      <div class="ledger-card ledger-card--emerald">
+        <div class="flex items-center gap-2 mb-4"><span data-icon="trend-up"></span><h2 style="font-size:1.125rem;margin:0;font-weight:600">Receivables</h2></div>
+        <p class="text-muted" style="font-size:0.75rem;margin:0 0 1rem">Money in — client payments pending or collected.</p>
+        <div id="receivables-list">
+          {% for row in snapshot.receivables %}
+          <div class="card flex gap-2 mb-2" style="padding:0.75rem;flex-wrap:wrap" data-ledger-row data-id="{{ row.id }}">
+            <input class="input" style="flex:1;min-width:140px" data-line="description" value="{{ row.description }}" placeholder="Description">
+            <input class="input" style="flex:1;min-width:120px" data-line="counterparty" value="{{ row.counterparty }}" placeholder="Client">
+            <input class="input input--mono" style="width:8rem" data-line="amount" value="{{ row.amount }}" placeholder="0.00">
+            <button type="button" class="btn--icon" data-remove-ledger><span data-icon="x"></span></button>
+          </div>
+          {% endfor %}
+        </div>
+        <button type="button" class="btn btn--ghost btn--sm mt-4" data-add-ledger="receivables"><span data-icon="plus"></span> Add line</button>
+      </div>
+    </div>
+
+    <section class="card" style="padding:1.5rem;background:linear-gradient(135deg,rgba(221,216,206,0.6),rgba(221,216,206,0.25))">
+      <div class="flex items-center gap-2 mb-5"><span data-icon="calculator"></span><h2 style="font-size:1rem;margin:0;font-weight:600">Snapshot</h2></div>
+      <div class="totals-grid mb-6">
+        <div class="totals-card"><div class="field__label">Total payables</div><div class="text-mono" style="font-size:1.125rem;font-weight:600;color:#9f1239" id="total-payables">PHP {{ totals.payable_sum_fmt }}</div></div>
+        <div class="totals-card"><div class="field__label">Total receivables</div><div class="text-mono" style="font-size:1.125rem;font-weight:600;color:#047857" id="total-receivables">PHP {{ totals.receivable_sum_fmt }}</div></div>
+        <div class="totals-card totals-card--accent"><div class="field__label">Net income</div><div class="text-mono" style="font-size:1.25rem;font-weight:700" id="net-income">PHP {{ totals.net_fmt }}</div><div class="text-muted" style="font-size:0.6875rem;margin-top:0.25rem">Receivables − Payables</div></div>
+      </div>
+      <form method="post" action="{{ url_for('accounting.reset_accounting') }}" onsubmit="return confirm('Reset accounting sheet to empty? This clears client fields and every line.')">
+        <button type="submit" class="btn btn--ghost btn--sm text-danger">Reset entire accounting sheet…</button>
+      </form>
+    </section>
+  </main>
+  <div class="pdf-export-root" id="accounting-export-root" aria-hidden="true"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/money.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/accounting.js') }}" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" defer></script>
+<script src="{{ url_for('static', filename='js/pdf-export.js') }}" defer></script>
+{% endblock %}

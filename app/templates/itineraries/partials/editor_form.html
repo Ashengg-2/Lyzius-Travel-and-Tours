@@ -1,0 +1,251 @@
+<div class="form-stack" id="itinerary-form-root">
+  <div class="section" data-section>
+    <button type="button" class="section__toggle" aria-expanded="true">
+      <span class="section__title"><span data-icon="globe"></span> Agency &amp; Brand</span>
+      <span data-icon="chevron-up" class="section-chevron"></span>
+    </button>
+    <div class="section__body">
+      <div class="grid-2">
+        <div class="field"><label class="field__label">Agency display name</label>
+          <input class="input" data-field="agencyName" value="{{ form.agencyName }}"></div>
+        <div class="field"><label class="field__label">Tagline</label>
+          <input class="input" data-field="agencyTagline" value="{{ form.agencyTagline }}"></div>
+        <div class="field col-span-2"><label class="field__label">Page 1 heading</label>
+          <input class="input" data-field="page1Heading" value="{{ form.page1Heading }}"></div>
+        <div class="field col-span-2"><label class="field__label">Footer disclaimer</label>
+          <textarea class="textarea" rows="3" data-field="agencyFooter">{{ form.agencyFooter }}</textarea></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" data-section>
+    <button type="button" class="section__toggle" aria-expanded="true">
+      <span class="section__title"><span data-icon="plane"></span> Outbound Flight</span>
+      <span data-icon="chevron-up" class="section-chevron"></span>
+    </button>
+    <div class="section__body">
+      {% with flight=form.outbound, flight_prefix='outbound' %}
+        {% include 'itineraries/partials/flight_fields.html' %}
+      {% endwith %}
+    </div>
+  </div>
+
+  <div class="section is-collapsed" data-section>
+    <button type="button" class="section__toggle" aria-expanded="false">
+      <span class="section__title"><span data-icon="plane"></span> Return Flight</span>
+      <span data-icon="chevron-down" class="section-chevron"></span>
+    </button>
+    <div class="section__body">
+      {% with flight=form.returnFlight, flight_prefix='returnFlight' %}
+        {% include 'itineraries/partials/flight_fields.html' %}
+      {% endwith %}
+    </div>
+  </div>
+
+  <div class="section" data-section>
+    <button type="button" class="section__toggle" aria-expanded="true">
+      <span class="section__title"><span data-icon="building"></span> Hotel</span>
+      <span data-icon="chevron-up" class="section-chevron"></span>
+    </button>
+    <div class="section__body">
+      <div class="grid-2">
+        <div class="field col-span-2"><label class="field__label">Hotel name</label>
+          <input class="input" data-field="hotelName" value="{{ form.hotelName }}"></div>
+        <div class="field col-span-2"><label class="field__label">Address</label>
+          <textarea class="textarea" rows="2" data-field="hotelAddress">{{ form.hotelAddress }}</textarea></div>
+        <div class="field"><label class="field__label">Phone</label>
+          <input class="input" data-field="hotelPhone" value="{{ form.hotelPhone }}"></div>
+        <div></div>
+        <div class="field"><label class="field__label">Check-in date</label>
+          <input class="input input--mono" type="date" data-field="checkIn" value="{{ form.checkIn }}"></div>
+        <div class="field"><label class="field__label">Check-out date</label>
+          <input class="input input--mono" type="date" data-field="checkOut" value="{{ form.checkOut }}"></div>
+        <div class="field col-span-2"><label class="field__label">Room description</label>
+          <input class="input" data-field="roomDesc" value="{{ form.roomDesc }}"></div>
+        <div class="field col-span-2"><label class="field__label">Inclusions</label>
+          <input class="input" data-field="inclusions" value="{{ form.inclusions }}"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section is-collapsed" data-section>
+    <button type="button" class="section__toggle" aria-expanded="false">
+      <span class="section__title"><span data-icon="receipt"></span> Supplements &amp; Fees</span>
+      <span data-icon="chevron-down" class="section-chevron"></span>
+    </button>
+    <div class="section__body">
+      <div id="supplements-list" data-dynamic-list="supplements">
+        {% for s in form.supplements %}
+        <div class="flex gap-2 mb-2" data-row data-id="{{ s.id }}">
+          <input class="input" style="flex:1" data-sup-field="desc" value="{{ s.desc }}" placeholder="Description">
+          <input class="input" style="width:7rem" data-sup-field="amount" value="{{ s.amount }}" placeholder="0.00">
+          <select class="select" style="width:9rem" data-sup-field="chargeType">
+            <option{% if s.chargeType == 'Pay at hotel' %} selected{% endif %}>Pay at hotel</option>
+            <option{% if s.chargeType == 'Prepaid' %} selected{% endif %}>Prepaid</option>
+          </select>
+          <button type="button" class="btn--icon" data-remove-row><span data-icon="x"></span></button>
+        </div>
+        {% endfor %}
+      </div>
+      <button type="button" class="btn btn--ghost btn--sm mt-4" data-add-supplement><span data-icon="plus"></span> Add row</button>
+    </div>
+  </div>
+
+  <div class="section is-collapsed" data-section>
+    <button type="button" class="section__toggle" aria-expanded="false">
+      <span class="section__title"><span data-icon="alert"></span> Cancellation &amp; Policies</span>
+      <span data-icon="chevron-down" class="section-chevron"></span>
+    </button>
+    <div class="section__body">
+      <p class="field__label">Cancellation tiers</p>
+      <div id="cancellation-list" data-dynamic-list="cancellationRows">
+        {% for c in form.cancellationRows %}
+        <div class="flex gap-2 mb-2" data-row data-id="{{ c.id }}">
+          <input class="input" style="flex:1" data-can-field="rule" value="{{ c.rule }}" placeholder="Until 25 Oct 2026">
+          <input class="input" style="width:8rem" data-can-field="charge" value="{{ c.charge }}" placeholder="0.00 PHP">
+          <button type="button" class="btn--icon" data-remove-row><span data-icon="x"></span></button>
+        </div>
+        {% endfor %}
+      </div>
+      <button type="button" class="btn btn--ghost btn--sm mt-4" data-add-cancellation><span data-icon="plus"></span> Add tier</button>
+      <div class="field mt-4"><label class="field__label">No-show charges</label>
+        <input class="input" data-field="noShow" value="{{ form.noShow }}"></div>
+      <div class="field"><label class="field__label">Rates &amp; conditions</label>
+        <textarea class="textarea" rows="5" data-field="ratesConditions">{{ form.ratesConditions }}</textarea></div>
+    </div>
+  </div>
+
+  <div class="section is-collapsed" data-section>
+    <button type="button" class="section__toggle" aria-expanded="false">
+      <span class="section__title"><span data-icon="phone"></span> Agency Contact</span>
+      <span data-icon="chevron-down" class="section-chevron"></span>
+    </button>
+    <div class="section__body">
+      <div class="grid-2">
+        <div class="field col-span-2"><label class="field__label">Contact person</label>
+          <input class="input" data-field="contactName" value="{{ form.contactName }}"></div>
+        <div class="field"><label class="field__label">Phone</label>
+          <input class="input" data-field="contactPhone" value="{{ form.contactPhone }}"></div>
+        <div class="field"><label class="field__label">Email</label>
+          <input class="input" data-field="contactEmail" value="{{ form.contactEmail }}"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section is-collapsed" data-section>
+    <button type="button" class="section__toggle" aria-expanded="false">
+      <span class="section__title"><span data-icon="user"></span> Passengers</span>
+      <span data-icon="chevron-down" class="section-chevron"></span>
+    </button>
+    <div class="section__body" id="passengers-list">
+      {% for p in form.passengers %}
+        {% include 'itineraries/partials/passenger_card.html' %}
+      {% endfor %}
+      <button type="button" class="btn btn--ghost btn--sm" data-add-passenger><span data-icon="plus"></span> Add passenger</button>
+    </div>
+  </div>
+
+  <div class="section is-collapsed" data-section>
+    <button type="button" class="section__toggle" aria-expanded="false">
+      <span class="section__title"><span data-icon="card"></span> Payment &amp; Fare Breakdown</span>
+      <span data-icon="chevron-down" class="section-chevron"></span>
+    </button>
+    <div class="section__body">
+      <label class="flex gap-2 mb-4" style="align-items:flex-start;cursor:pointer;padding:0.75rem;border:1px solid var(--border);border-radius:var(--radius-lg);background:rgba(221,216,206,0.2)">
+        <input type="checkbox" data-field="hidePricingOnPdf"{% if form.hidePricingOnPdf %} checked{% endif %} style="margin-top:0.2rem">
+        <span style="font-size:0.75rem">
+          <strong>Hide prices on itinerary PDF</strong>
+          <span class="text-muted" style="display:block;margin-top:0.125rem">Omits fares, totals, supplement amounts, and penalty charges from the exported document.</span>
+        </span>
+      </label>
+      <div class="grid-2">
+        <div>
+          <p class="field__label">Adult Fare</p>
+          <div class="field"><label class="field__label">Base fare</label>
+            <input class="input input--mono" data-field="adultBaseFare" data-money-input value="{{ form.adultBaseFare }}"></div>
+          <div class="field"><label class="field__label">Other charges</label>
+            <input class="input input--mono" data-field="adultOtherCharges" data-money-input value="{{ form.adultOtherCharges }}"></div>
+          <div class="field"><label class="field__label">Total adult fare (computed)</label>
+            <input class="input input--mono input--readonly" readonly data-field="adultTotalFare" value="{{ form.adultTotalFare }}"></div>
+        </div>
+        <div>
+          <p class="field__label">Room Rate</p>
+          <div class="field"><label class="field__label">Room rate</label>
+            <input class="input input--mono" data-field="roomRate" data-money-input value="{{ form.roomRate }}"></div>
+          <div class="field"><label class="field__label">Taxes &amp; fees</label>
+            <input class="input input--mono" data-field="roomTaxes" data-money-input value="{{ form.roomTaxes }}"></div>
+          <div class="field"><label class="field__label">Total room rate (computed)</label>
+            <input class="input input--mono input--readonly" readonly data-field="totalRoomRate" value="{{ form.totalRoomRate }}"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section is-collapsed" data-section>
+    <button type="button" class="section__toggle" aria-expanded="false">
+      <span class="section__title"><span data-icon="card"></span> Summary Totals</span>
+      <span data-icon="chevron-down" class="section-chevron"></span>
+    </button>
+    <div class="section__body">
+      <div class="card" style="padding:1rem;background:rgba(221,216,206,0.3)">
+        <div class="field"><label class="field__label">Original total — PHP (computed)</label>
+          <input class="input input--mono input--readonly" readonly data-field="originalTotal" value="{{ form.originalTotal }}" style="text-decoration:line-through;color:var(--muted-foreground)"></div>
+        <div class="field"><label class="field__label">Bundle savings (PHP)</label>
+          <input class="input input--mono text-danger" data-field="savings" data-money-input value="{{ form.savings }}"></div>
+        <div class="field" style="padding-top:0.5rem;border-top:1px solid var(--border)"><label class="field__label">Total due — PHP (computed)</label>
+          <input class="input input--mono input--readonly" readonly data-field="totalDue" value="{{ form.totalDue }}" style="font-weight:700"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="internal-notes">
+    <div class="internal-notes__head"><span data-icon="lock"></span> Internal Notes <span style="font-weight:400;font-size:0.75rem">— not visible on exported PDF</span></div>
+    <div class="internal-notes__body">
+      <textarea class="textarea" rows="4" data-field="internalNotes" placeholder="Private notes for your reference only…">{{ form.internalNotes }}</textarea>
+    </div>
+  </div>
+</div>
+
+<template id="tpl-supplement-row">
+  <div class="flex gap-2 mb-2" data-row>
+    <input class="input" style="flex:1" data-sup-field="desc" placeholder="Description">
+    <input class="input" style="width:7rem" data-sup-field="amount" placeholder="0.00">
+    <select class="select" style="width:9rem" data-sup-field="chargeType">
+      <option>Pay at hotel</option><option>Prepaid</option>
+    </select>
+    <button type="button" class="btn--icon" data-remove-row><span data-icon="x"></span></button>
+  </div>
+</template>
+
+<template id="tpl-cancellation-row">
+  <div class="flex gap-2 mb-2" data-row>
+    <input class="input" style="flex:1" data-can-field="rule" placeholder="Until 25 Oct 2026">
+    <input class="input" style="width:8rem" data-can-field="charge" placeholder="0.00 PHP">
+    <button type="button" class="btn--icon" data-remove-row><span data-icon="x"></span></button>
+  </div>
+</template>
+
+<template id="tpl-passenger-card">
+  <div class="passenger-card card" style="padding:1rem;margin-bottom:1rem;background:rgba(221,216,206,0.2)" data-passenger-id="">
+    <div class="flex items-center" style="justify-content:space-between;margin-bottom:0.75rem">
+      <p class="field__label" style="margin:0">Traveler</p>
+      <button type="button" class="btn--icon" data-remove-passenger><span data-icon="x"></span></button>
+    </div>
+    <div class="grid-2">
+      <div class="field" style="grid-column:span 2;display:grid;grid-template-columns:76px 1fr 1fr;gap:0.5rem">
+        <div><label class="field__label">Title</label>
+          <select class="select" data-passenger-field="honorific"><option>MR.</option><option>MS.</option><option>MRS.</option><option>DR.</option><option>PROF.</option></select></div>
+        <div><label class="field__label">First name</label><input class="input" data-passenger-field="firstName"></div>
+        <div><label class="field__label">Last name</label><input class="input" data-passenger-field="lastName"></div>
+      </div>
+      <div class="field"><label class="field__label">Passenger type</label>
+        <select class="select" data-passenger-field="passengerType"><option>Adult</option><option>Child</option></select></div>
+      <div class="field"><label class="field__label">Date of birth</label><input class="input input--mono" type="date" data-passenger-field="birthdate"></div>
+      <div class="field"><label class="field__label">Nationality</label><input class="input" data-passenger-field="nationality"></div>
+      <div class="field"><label class="field__label">Passport no.</label><input class="input" data-passenger-field="passportNo"></div>
+      <div class="field"><label class="field__label">Passport expiry</label><input class="input input--mono" type="date" data-passenger-field="passportExpiry"></div>
+      <div class="field"><label class="field__label">Issuing country</label><input class="input" data-passenger-field="issuingCountry"></div>
+      <div class="field"><label class="field__label">Date issued</label><input class="input input--mono" type="date" data-passenger-field="dateIssued"></div>
+    </div>
+  </div>
+</template>

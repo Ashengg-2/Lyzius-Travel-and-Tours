@@ -1,0 +1,57 @@
+{# Flight fields partial — expects variable `flight_prefix` e.g. outbound #}
+<div class="grid-2">
+  <div class="field col-span-2">
+    <label class="field__label">Route</label>
+    <input class="input" data-field="{{ flight_prefix }}.route" value="{{ flight.route | default('') }}" placeholder="Manila (MNL) → Osaka (KIX)">
+  </div>
+  <div class="field">
+    <label class="field__label">Airline</label>
+    <input class="input" data-field="{{ flight_prefix }}.airline" value="{{ flight.airline | default('') }}">
+  </div>
+  <div class="field">
+    <label class="field__label">Flight no.</label>
+    <input class="input" data-field="{{ flight_prefix }}.flightNo" value="{{ flight.flightNo | default('') }}">
+  </div>
+  <div class="field">
+    <label class="field__label">Dep. airport</label>
+    <input class="input" data-field="{{ flight_prefix }}.depAirport" value="{{ flight.depAirport | default('') }}">
+  </div>
+  <div class="field">
+    <label class="field__label">Dep. terminal</label>
+    <input class="input" data-field="{{ flight_prefix }}.depTerminal" value="{{ flight.depTerminal | default('') }}">
+  </div>
+  <div class="field">
+    <label class="field__label">Dep. date</label>
+    <div class="flex gap-2">
+      <input class="input input--mono" type="date" data-field="{{ flight_prefix }}.depDate" value="{{ flight.depDate | default('') }}">
+    </div>
+  </div>
+  <div class="field">
+    <label class="field__label">Dep. time</label>
+    <input class="input" data-field="{{ flight_prefix }}.depTime" value="{{ flight.depTime | default('') }}">
+  </div>
+  <div class="field">
+    <label class="field__label">Arr. airport</label>
+    <input class="input" data-field="{{ flight_prefix }}.arrAirport" value="{{ flight.arrAirport | default('') }}">
+  </div>
+  <div class="field">
+    <label class="field__label">Arr. terminal</label>
+    <input class="input" data-field="{{ flight_prefix }}.arrTerminal" value="{{ flight.arrTerminal | default('') }}">
+  </div>
+  <div class="field">
+    <label class="field__label">Arr. date</label>
+    <input class="input input--mono" type="date" data-field="{{ flight_prefix }}.arrDate" value="{{ flight.arrDate | default('') }}">
+  </div>
+  <div class="field">
+    <label class="field__label">Arr. time</label>
+    <input class="input" data-field="{{ flight_prefix }}.arrTime" value="{{ flight.arrTime | default('') }}">
+  </div>
+  <div class="field">
+    <label class="field__label">Duration</label>
+    <input class="input" data-field="{{ flight_prefix }}.duration" value="{{ flight.duration | default('') }}">
+  </div>
+  <div class="field col-span-2">
+    <label class="field__label">Baggage policy</label>
+    <input class="input" data-field="{{ flight_prefix }}.baggage" value="{{ flight.baggage | default('') }}">
+  </div>
+</div>

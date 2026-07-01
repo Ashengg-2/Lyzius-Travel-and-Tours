@@ -1,0 +1,13 @@
+{% macro field(label, class_name='') %}
+<div class="field {{ class_name }}">
+  <label class="field__label">{{ label }}</label>
+  {{ caller() }}
+</div>
+{% endmacro %}
+
+{% macro status_pill(status) %}
+<span class="status-pill status-pill--{{ status }}">
+  {% if status == 'ready' %}✓{% else %}◷{% endif %}
+  {{ 'Ready' if status == 'ready' else 'Draft' }}
+</span>
+{% endmacro %}

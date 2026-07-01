@@ -1,0 +1,31 @@
+{% macro pdf_page_shell(export_marker=false) %}
+<div class="pdf-page"{% if export_marker %} data-itinerary-export-page{% endif %}>
+  {{ caller() }}
+</div>
+{% endmacro %}
+
+{% macro pdf_row(label, value, compact=false) %}
+<tr>
+  <td style="padding:{% if compact %}3px 8px{% else %}5px 10px{% endif %};color:#57534e;font-size:{% if compact %}7.85px{% else %}8.5px{% endif %};width:38%;border-bottom:1px solid #e7e5e4;vertical-align:top">{{ label }}</td>
+  <td style="padding:{% if compact %}3px 8px{% else %}5px 10px{% endif %};color:#1c1917;border-bottom:1px solid #e7e5e4;vertical-align:top;line-height:{% if compact %}1.35{% else %}1.5{% endif %}">{{ value or '—' }}</td>
+</tr>
+{% endmacro %}
+
+{% macro pdf_block(title, compact=false) %}
+<div style="margin-bottom:{% if compact %}8px{% else %}14px{% endif %}">
+  <div style="font-size:7.5px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#78716c;margin-bottom:{% if compact %}3px{% else %}5px{% endif %}">{{ title }}</div>
+  <div style="border:1px solid #d6d3d1;border-radius:4px;overflow:hidden">
+    {{ caller() }}
+  </div>
+</div>
+{% endmacro %}
+
+{% macro brand_header(form) %}
+<div style="display:flex;align-items:flex-start;gap:12px">
+  <img src="/static/images/lyzius-logo.svg" alt="" style="height:42px;width:auto;max-width:120px;object-fit:contain">
+  <div>
+    <div style="font-size:13px;font-weight:700;color:#1c1917;letter-spacing:-0.02em">{{ form.agencyName }}</div>
+    <div style="font-size:8.5px;color:#78716c;margin-top:2px">{{ form.agencyTagline }}</div>
+  </div>
+</div>
+{% endmacro %}

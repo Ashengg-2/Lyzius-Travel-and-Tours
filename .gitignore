@@ -9,4 +9,8 @@ server/.env
 server/prisma/dev.db
 server/prisma/dev.db-journal
 
+instance/
+__pycache__/
+*.pyc
+
 .DS_Store

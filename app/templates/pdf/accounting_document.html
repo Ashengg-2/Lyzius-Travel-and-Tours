@@ -1,0 +1,45 @@
+{% for page in pages %}
+<div class="pdf-page"{% if export_marker %} data-accounting-export-page{% endif %}>
+  {% for unit in page.units %}
+    {% if unit.type == 'banner' %}
+    <header style="margin-bottom:14px;border-bottom:1px solid #e7e5e4">
+      <div style="font-size:18px;font-weight:700;letter-spacing:-0.02em">{{ unit.title }}</div>
+      <div style="margin-top:4px;font-size:9px;color:#57534e">Generated {{ unit.date_line }}</div>
+    </header>
+    {% elif unit.type == 'continuation' %}
+    <div style="margin-bottom:10px;font-size:9.5px;font-weight:600;color:#78716c;letter-spacing:0.06em;text-transform:uppercase">Accounting summary — continued</div>
+    {% elif unit.type == 'client' %}
+    {% set c = unit.snapshot %}
+    <section style="margin-bottom:14px">
+      <div style="font-size:10px;font-weight:700;margin-bottom:10px">Client</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;font-size:8.85px;border:1px solid #e7e5e4;padding:10px 12px;border-radius:6px;background:#fafafa">
+        <div><div style="font-size:7px;text-transform:uppercase;color:#78716c;margin-bottom:2px">Name</div>{{ c.clientName or '—' }}</div>
+        <div><div style="font-size:7px;text-transform:uppercase;color:#78716c;margin-bottom:2px">Company</div>{{ c.clientCompany or '—' }}</div>
+        <div><div style="font-size:7px;text-transform:uppercase;color:#78716c;margin-bottom:2px">Email</div>{{ c.clientEmail or '—' }}</div>
+        <div><div style="font-size:7px;text-transform:uppercase;color:#78716c;margin-bottom:2px">Phone</div>{{ c.clientPhone or '—' }}</div>
+        <div style="grid-column:1/-1"><div style="font-size:7px;text-transform:uppercase;color:#78716c;margin-bottom:2px">Notes</div><div style="color:#57534e;white-space:pre-wrap">{{ c.clientNotes or '—' }}</div></div>
+      </div>
+    </section>
+    {% elif unit.type == 'snapshot' %}
+    {% set t = unit.totals %}
+    <section style="margin-bottom:14px">
+      <div style="font-size:10px;font-weight:700;margin-bottom:8px">Snapshot</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div style="border:1px solid #e7e5e4;border-radius:6px;padding:8px 10px"><div style="font-size:7px;text-transform:uppercase;color:#78716c">Total payables</div><div style="font-family:ui-monospace,monospace;font-size:13px;font-weight:700;color:#9f1239">PHP {{ t.payable_sum_fmt }}</div></div>
+        <div style="border:1px solid #e7e5e4;border-radius:6px;padding:8px 10px"><div style="font-size:7px;text-transform:uppercase;color:#78716c">Total receivables</div><div style="font-family:ui-monospace,monospace;font-size:13px;font-weight:700;color:#047857">PHP {{ t.receivable_sum_fmt }}</div></div>
+        <div style="border:1px solid #d6d3d1;border-radius:6px;padding:8px 10px;background:#f0fdf4"><div style="font-size:7px;text-transform:uppercase;color:#78716c">Net income</div><div style="font-family:ui-monospace,monospace;font-size:14px;font-weight:800;color:{% if t.net >= 0 %}#047857{% else %}#b91c1c{% endif %}">PHP {{ t.net_fmt }}</div></div>
+      </div>
+    </section>
+    {% elif unit.type == 'section' %}
+    <div style="margin:4px 0 6px;padding:6px 10px;border-radius:6px;font-size:10px;font-weight:700;border:1px solid #e7e5e4;background:{% if unit.tint == 'rose' %}#fff1f2{% else %}#ecfdf5{% endif %};color:{% if unit.tint == 'rose' %}#9f1239{% else %}#047857{% endif %}">{{ unit.label }}</div>
+    {% elif unit.type == 'row' %}
+    {% set r = unit.row %}
+    <div style="display:grid;grid-template-columns:1fr 1fr 104px;gap:6px;font-size:8.55px;border-bottom:1px solid #e7e5e4;padding-bottom:3px;margin-bottom:3px">
+      <div>{{ r.description or '—' }}</div>
+      <div style="color:#57534e">{{ r.counterparty or '—' }}</div>
+      <div style="font-family:ui-monospace,monospace;text-align:right">PHP {{ r.amount or '0.00' }}</div>
+    </div>
+    {% endif %}
+  {% endfor %}
+</div>
+{% endfor %}
