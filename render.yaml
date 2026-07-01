@@ -1,0 +1,16 @@
+# Render Blueprint — Flask production
+# Dashboard: New > Blueprint, or copy these settings into your Web Service manually.
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: lyzius-travel-and-tours
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT run:app
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      # Optional — attach a persistent disk at /data first, then uncomment:
+      # - key: DATABASE_URL
+      #   value: sqlite:////data/lyzius.db
