@@ -725,6 +725,10 @@ button, input, select, textarea {
   position: relative;
 }
 
+.dropdown__menu[hidden] {
+  display: none !important;
+}
+
 .dropdown__menu {
   position: absolute;
   right: 0;

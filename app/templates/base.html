@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#2b6462">
   <title>{% block title %}{{ brand_name | default('Lyzius Travel & Tours') }}{% endblock %}</title>
-  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/lyzius-logo.svg') }}">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/lyzius-logo.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/lyzius-logo.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
   {% block head %}{% endblock %}
 </head>

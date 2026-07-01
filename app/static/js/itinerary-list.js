@@ -29,27 +29,29 @@
   });
 
   document.querySelectorAll('[data-delete]').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       const id = btn.getAttribute('data-delete');
-      if (!modal || !deleteForm) return;
-      deleteForm.action = `/itineraries/${id}/delete`;
+      if (!modal || !deleteForm || !id) return;
+      document.querySelectorAll('[data-menu]').forEach((m) => {
+        m.hidden = true;
+      });
+      deleteForm.setAttribute('action', `/itineraries/${id}/delete`);
       modal.hidden = false;
     });
   });
 
-  deleteForm?.addEventListener('submit', (e) => {
-    const action = deleteForm.getAttribute('action') || '';
-    if (!action || action === '#' || action.endsWith('/itineraries/')) {
-      e.preventDefault();
-    }
-  });
-
   deleteCancel?.addEventListener('click', () => {
     if (modal) modal.hidden = true;
+    deleteForm?.setAttribute('action', '#');
   });
 
   modal?.addEventListener('click', (e) => {
-    if (e.target === modal) modal.hidden = true;
+    if (e.target === modal) {
+      modal.hidden = true;
+      deleteForm?.setAttribute('action', '#');
+    }
   });
 
   const searchInput = document.getElementById('search-input');
